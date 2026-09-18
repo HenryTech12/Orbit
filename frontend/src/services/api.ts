@@ -9,9 +9,11 @@ import type{
 import { MOCK_ASK_RESPONSE, MOCK_CATCHUP_RESPONSE, MOCK_SOURCE_DETAIL } from './mockData';
 
 // Set this to false once the backend service is deployed
-const USE_MOCK = import.meta.env.NEXT_PUBLIC_USE_MOCK === 'true' || true;
-const API_BASE_URL = import.meta.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1';
+const USE_MOCK = import.meta.env.VITE_USE_MOCK_API === 'true';
 
+const API_BASE_URL =
+  import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api/v1';
+  
 export const sentinelApi = {
   async ask(payload: CopilotAskRequest): Promise<CopilotAskResponse> {
     if (USE_MOCK) {
