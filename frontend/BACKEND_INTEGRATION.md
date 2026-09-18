@@ -103,7 +103,30 @@ Ingests unstructured source data into the vector database.
   "status": "indexed"
 }
 ```
+### POST `/audio/transcribe` (Section 6.7 Voice Pipeline on the PRD)
+Converts browser-recorded audio chunks into plain text via Whisper before passing the transcribed query directly into the grounded `/chat` pipeline.
 
+**Content-Type:** `multipart/form-data`
+
+**Expected Payload (Form Data):**
+* `file`: `File` (Binary audio stream, typically `audio/webm` or `audio/wav`)
+
+**Expected Response (200 OK):**
+```json
+{
+  "text": "When is the milestone 1 submission deadline?"
+}
+```
+
+**Error Responses:**
+* `400 Bad Request`:
+  ```json
+  { "detail": "No audio file provided or invalid codec." }
+  ```
+* `500 Internal Server Error`:
+  ```json
+  { "detail": "Whisper transcription failed." }
+  ```
 ---
 
 ## 3. Auth & Role Expectations
