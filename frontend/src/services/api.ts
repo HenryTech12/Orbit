@@ -13,7 +13,7 @@ const USE_MOCK = import.meta.env.VITE_USE_MOCK_API === 'true';
 
 const API_BASE_URL =
   import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api/v1';
-  
+
 export const sentinelApi = {
   async ask(payload: CopilotAskRequest): Promise<CopilotAskResponse> {
     if (USE_MOCK) {
@@ -74,5 +74,28 @@ export const sentinelApi = {
     });
     if (!res.ok) throw new Error(`Upload error: ${res.statusText}`);
     return res.json();
+  },
+  async transcribeAudio(blob: Blob): Promise<{ text: string }> {
+  if (USE_MOCK) {
+    await new Promise((r) => setTimeout(r, 1200));
+    return {
+      text: 'What are the core deadlines for Milestone 1 submission?',
+    };
   }
+
+  const formData = new FormData();
+  formData.append('file', blob, 'audio.webm');
+
+  const res = await fetch(`${API_BASE_URL}/audio/transcribe`, {
+    method: 'POST',
+    body: formData,
+  });
+
+  if (!res.ok) {
+    throw new Error(`Transcription error: ${res.statusText}`);
+  }
+
+  return res.json();
+},
+  
 };

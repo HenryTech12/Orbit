@@ -1,5 +1,5 @@
 import { useState, useRef, useCallback } from 'react';
-
+import { sentinelApi } from '@/services/api';
 interface UseVoiceInteractionOptions {
   onTranscriptionComplete?: (transcript: string) => void;
 }
@@ -49,23 +49,8 @@ export const useVoiceInteraction = ({ onTranscriptionComplete }: UseVoiceInterac
     setIsTranscribing(true);
     try {
       // If mock mode is active, simulate a realistic question
-      const useMock = import.meta.env.VITE_USE_MOCK_API === 'true';
-      let text = '';
-
-      if (useMock) {
-        await new Promise((res) => setTimeout(res, 1200));
-        text = 'What are the core deadlines for Milestone 1 submission?';
-      } else {
-        const formData = new FormData();
-        formData.append('file', blob, 'audio.webm');
-        const res = await fetch(`${import.meta.env.VITE_API_BASE_URL}/audio/transcribe`, {
-          method: 'POST',
-          body: formData,
-        });
-        const data = await res.json();
-        text = data.text || '';
-      }
-
+      
+const { text } = await sentinelApi.transcribeAudio(blob);
       if (text && onTranscriptionComplete) {
         onTranscriptionComplete(text);
       }
