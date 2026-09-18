@@ -3,6 +3,7 @@ import { Routes, Route } from 'react-router-dom';
 import { Navbar } from '@/components/common/Navbar';
 import { ChatWindow } from '@/components/chat/ChatWindow';
 import { CatchUpView } from '@/components/catchup/CatchUpView';
+import { UploadView } from '@/components/upload/UploadView';
 
 export const App: React.FC = () => {
   return (
@@ -12,14 +13,7 @@ export const App: React.FC = () => {
         <Routes>
           <Route path="/" element={<ChatWindow />} />
           <Route path="/catch-up" element={<CatchUpView />} />
-          <Route
-            path="/upload"
-            element={
-              <div className="text-center py-16 text-zinc-500 text-sm">
-                Upload & Ingestion view will be mounted here.
-              </div>
-            }
-          />
+          <Route path="/upload" element={<UploadView />} />
         </Routes>
       </main>
     </div>
