@@ -6,6 +6,7 @@ import { CatchUpView } from '@/components/catchup/CatchUpView';
 import { UploadView } from '@/components/upload/UploadView';
 import { AuthProvider } from '@/context/AuthContext';
 import { ProtectedRoute } from '@/components/common/ProtectedRoute';
+import { NotFound } from '@/components/common/NotFound';
 
 export const App: React.FC = () => {
   return (
@@ -25,7 +26,9 @@ export const App: React.FC = () => {
                   <UploadView />
                 </ProtectedRoute>
               }
+              
             />
+            <Route path="*" element={<NotFound />} />
           </Routes>
         </main>
       </div>
