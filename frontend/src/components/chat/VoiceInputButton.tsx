@@ -1,5 +1,5 @@
 import React from 'react';
-import { Mic, MicOff, Loader2, Volume2, VolumeX } from 'lucide-react';
+import { Mic, MicOff, Loader2, VolumeX } from 'lucide-react';
 
 interface VoiceInputButtonProps {
   isRecording: boolean;
