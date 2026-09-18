@@ -1,0 +1,5 @@
+Django==6.1.1
+djangorestframework==3.18.1
+psycopg2-binary==2.9.13
+django-environ==0.14.0
+django-cors-headers==4.9.0
