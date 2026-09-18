@@ -1,45 +1,85 @@
-import React, { useState } from 'react';
-import { useMutation } from '@tanstack/react-query';
-import { sentinelApi } from '@/services/api';
-import type { CopilotAskResponse } from '@/types/sentinel';
-import { ChatMessage, type ChatMessageItem } from './ChatMessage';
-import { EvidenceDrawer } from '../citations/EvidenceDrawer';
-import { Send, Loader2, Sparkles } from 'lucide-react';
+import React, { useState } from "react";
+import { useMutation } from "@tanstack/react-query";
+import { sentinelApi } from "@/services/api";
+import type { CopilotAskResponse } from "@/types/sentinel";
+import { ChatMessage, type ChatMessageItem } from "./ChatMessage";
+import { EvidenceDrawer } from "../citations/EvidenceDrawer";
+import { Send, Loader2, Sparkles } from "lucide-react";
+import { useVoiceInteraction } from "@/hooks/useVoiceInteraction";
+import { VoiceInputButton } from "@/components/chat/VoiceInputButton";
 
 export const ChatWindow: React.FC = () => {
-  const [input, setInput] = useState('');
+  const [input, setInput] = useState("");
   const [selectedSourceId, setSelectedSourceId] = useState<string | null>(null);
   const [messages, setMessages] = useState<ChatMessageItem[]>([
     {
-      id: 'welcome',
-      sender: 'assistant',
+      id: "welcome",
+      sender: "assistant",
       response: {
-        answer: 'Hello! I am Sentinel, your UniPods Knowledge Copilot. Ask me about announcements, deadlines, meetings, or decisions across our channels.',
-        status: 'CONFIRMED',
+        answer:
+          "Hello! I am Sentinel, your UniPods Knowledge Copilot. Ask me about announcements, deadlines, meetings, or decisions across our channels.",
+        status: "CONFIRMED",
         citations: [],
       },
       timestamp: new Date().toISOString(),
     },
   ]);
 
+  const handleSendText = (textToSend: string, shouldSpeakResponse = false) => {
+    const trimmed = textToSend.trim();
+    if (!trimmed || askMutation.isPending) return;
+
+    const userMessage: ChatMessageItem = {
+      id: `user-${Date.now()}`,
+      sender: "user",
+      text: trimmed,
+      timestamp: new Date().toISOString(),
+    };
+
+    setMessages((prev) => [...prev, userMessage]);
+    askMutation.mutate({ question: trimmed, shouldSpeak: shouldSpeakResponse });
+  };
+
+  const {
+    isRecording,
+    isTranscribing,
+    isPlayingAudio,
+    startRecording,
+    stopRecording,
+    speakText,
+    stopSpeaking,
+  } = useVoiceInteraction({
+    onTranscriptionComplete: (transcript) => {
+      if (transcript.trim()) {
+        handleSendText(transcript, true);
+      }
+    },
+  });
+
   const askMutation = useMutation({
-    mutationFn: (question: string) => sentinelApi.ask({ question }),
-    onSuccess: (data: CopilotAskResponse) => {
+    mutationFn: ({ question }: { question: string; shouldSpeak: boolean }) =>
+      sentinelApi.ask({ question }),
+    onSuccess: (data: CopilotAskResponse, variables) => {
       const assistantMessage: ChatMessageItem = {
         id: `asst-${Date.now()}`,
-        sender: 'assistant',
+        sender: "assistant",
         response: data,
         timestamp: new Date().toISOString(),
       };
       setMessages((prev) => [...prev, assistantMessage]);
+
+      if (variables.shouldSpeak && data.answer) {
+        speakText(data.answer);
+      }
     },
     onError: () => {
       const errorMessage: ChatMessageItem = {
         id: `err-${Date.now()}`,
-        sender: 'assistant',
+        sender: "assistant",
         response: {
-          answer: 'Unable to reach the Sentinel knowledge engine. Please check your connection or try again.',
-          status: 'UNKNOWN',
+          answer:
+            "Unable to reach the Sentinel knowledge engine. Please check your connection or try again.",
+          status: "UNKNOWN",
           citations: [],
         },
         timestamp: new Date().toISOString(),
@@ -50,19 +90,9 @@ export const ChatWindow: React.FC = () => {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const trimmed = input.trim();
-    if (!trimmed || askMutation.isPending) return;
-
-    const userMessage: ChatMessageItem = {
-      id: `user-${Date.now()}`,
-      sender: 'user',
-      text: trimmed,
-      timestamp: new Date().toISOString(),
-    };
-
-    setMessages((prev) => [...prev, userMessage]);
-    setInput('');
-    askMutation.mutate(trimmed);
+    if (!input.trim() || askMutation.isPending) return;
+    handleSendText(input, false);
+    setInput("");
   };
 
   return (
@@ -80,7 +110,9 @@ export const ChatWindow: React.FC = () => {
         {askMutation.isPending && (
           <div className="flex items-center gap-2 text-zinc-500 text-xs pl-2 py-2">
             <Loader2 className="w-4 h-4 animate-spin text-indigo-600" />
-            <span>Consulting UniPods knowledge base & verifying sources...</span>
+            <span>
+              Consulting UniPods knowledge base & verifying sources...
+            </span>
           </div>
         )}
       </div>
@@ -106,6 +138,16 @@ export const ChatWindow: React.FC = () => {
           >
             <Send className="w-4 h-4" />
           </button>
+
+          <VoiceInputButton
+            isRecording={isRecording}
+            isTranscribing={isTranscribing}
+            isPlayingAudio={isPlayingAudio}
+            onStart={startRecording}
+            onStop={stopRecording}
+            onCancelSpeech={stopSpeaking}
+            disabled={askMutation.isPending}
+          />
         </form>
       </div>
 
