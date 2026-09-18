@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { NavLink } from 'react-router-dom';
 import { MessageSquare, Calendar, UploadCloud, Shield, UserCheck } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';

@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { sentinelApi } from '@/services/api';
 import { CatchUpCard } from './CatchUpCard';
 import { EvidenceDrawer } from '@/components/citations/EvidenceDrawer';
-import { Calendar, RefreshCw, Loader2, Sparkles } from 'lucide-react';
+import { RefreshCw, Loader2, Sparkles } from 'lucide-react';
 
 export const CatchUpView: React.FC = () => {
   const [selectedDays, setSelectedDays] = useState<number>(10);
