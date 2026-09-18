@@ -3,15 +3,15 @@ services:
     image: postgres:16-alpine
     restart: unless-stopped
     environment:
-      POSTGRES_DB: ${POSTGRES_DB:-orbitbackend}
-      POSTGRES_USER: ${POSTGRES_USER:-orbitbackend}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-orbitbackend}
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     ports:
       - "${POSTGRES_PORT:-5433}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-orbitbackend}"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -28,6 +28,14 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
+
+  adminer:
+    image: adminer:latest
+    restart: unless-stopped
+    ports:
+      - "${ADMINER_PORT:-8081}:8080"
+    depends_on:
+      - postgres
 
 volumes:
   postgres_data:

@@ -47,6 +47,7 @@ INSTALLED_APPS = [
     'django_celery_beat',
     'django_celery_results',
     'core',
+    'orbitbackend.messages',
 ]
 
 MIDDLEWARE = [
