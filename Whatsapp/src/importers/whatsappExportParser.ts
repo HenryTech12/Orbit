@@ -1,7 +1,7 @@
 import type { WhatsAppMessage } from '../types/whatsapp.js';
 
 const MESSAGE_PATTERN =
-  /^\[(\d{1,2}[\/.-]\d{1,2}[\/.-]\d{2,4}),\s*(\d{1,2}:\d{2}(?::\d{2})?)\]\s*([^:]+):\s*(.*)$/;
+  /^\[(\d{1,2}[\/.-]\d{1,2}[\/.-]\d{2,4}),\s*(\d{1,2}:\d{2}(?::\d{2})?(?:\s?[APap][Mm])?)\]\s*([^:]+):\s*(.*)$/;
 
 export function parseWhatsAppExport(
   content: string,
@@ -29,8 +29,8 @@ export function parseWhatsAppExport(
     currentMessage = {
       messageId: crypto.randomUUID(),
       chatId,
-      senderId: senderName,
-      senderName,
+      senderId: senderName.trim(),
+      senderName: senderName.trim(),
       text,
       isGroup: true,
       timestamp,

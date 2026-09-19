@@ -12,3 +12,16 @@ export const MOCK_ASK_RESPONSE: CopilotAskResponse = {
     },
   ],
 };
+
+export const MOCK_SUMMARY_RESPONSE = {
+  summary:
+    "The team is currently working toward Milestone 1. The submission deadline is Tuesday, September 22, 2026 at 6:00 PM EAT.",
+  status: "CONFIRMED",
+  sources: [
+    {
+      sourceName: "WhatsApp Team Discussion",
+      excerpt:
+        "Milestone 1 submission deadline is Tuesday at 6:00 PM EAT.",
+    },
+  ],
+};
