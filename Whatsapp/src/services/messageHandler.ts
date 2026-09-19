@@ -10,6 +10,19 @@ export async function handleMessage(
   sentinelJid?: string,
 ): Promise<WhatsAppReply | null> {
   const text = message.text.trim();
+  if (
+    message.messageType !== "conversation" &&
+    message.messageType !== "extendedTextMessage"
+  ) {
+    if (!isSentinelMention(message, sentinelJid)) {
+      return null;
+    }
+
+    return {
+      text: "Sentinel currently supports text questions only. Document and media understanding is not enabled yet.",
+      replyToMessageId: message.messageId,
+    };
+  }
 
   if (!isSentinelMention(message, sentinelJid)) {
     return null;

@@ -8,6 +8,7 @@ export interface WhatsAppMessage {
   isGroup: boolean;
   timestamp: number;
   mentionedJids?: string[];
+  messageType?: string;
   rawMessage?: WAMessage;
 }
 
