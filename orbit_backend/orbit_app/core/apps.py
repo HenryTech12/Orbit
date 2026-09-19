@@ -2,5 +2,5 @@ from django.apps import AppConfig
 
 
 class CoreConfig(AppConfig):
-    name = 'orbitbackend.core'
+    name = 'orbit_app.core'
     label = 'core'

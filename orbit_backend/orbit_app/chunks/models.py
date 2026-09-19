@@ -1,7 +1,7 @@
 from django.contrib.postgres.fields import ArrayField
 from django.db import models
 
-from orbitbackend.softdelete import SoftDeleteModel
+from orbit_app.softdelete import SoftDeleteModel
 
 
 class Chunk(SoftDeleteModel):

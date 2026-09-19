@@ -1,6 +1,6 @@
 from django.db import models
 
-from orbitbackend.softdelete import SoftDeleteModel
+from orbit_app.softdelete import SoftDeleteModel
 
 
 class ActionItem(SoftDeleteModel):

@@ -1,7 +1,7 @@
 from django.db import models
 from django.utils import timezone
 
-from orbitbackend.softdelete import SoftDeleteModel
+from orbit_app.softdelete import SoftDeleteModel
 
 
 class TopicHistory(SoftDeleteModel):

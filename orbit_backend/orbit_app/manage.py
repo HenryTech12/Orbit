@@ -12,7 +12,7 @@ def main():
     here = Path(__file__).resolve().parent
     sys.path = [p for p in sys.path if Path(p or '.').resolve() != here]
     sys.path.insert(0, str(here.parent))
-    os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'orbitbackend.settings')
+    os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'orbit_app.settings')
     try:
         from django.core.management import execute_from_command_line
     except ImportError as exc:
