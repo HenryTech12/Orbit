@@ -38,5 +38,6 @@ export function normalizeWhatsAppMessage(
     mentionedJids: contextInfo?.mentionedJid
       ? [...contextInfo.mentionedJid]
       : [],
+    rawMessage: message,
   };
 }

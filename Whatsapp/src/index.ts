@@ -10,7 +10,12 @@ gateway.onMessage(async (message) => {
     return;
   }
 
-  await gateway.sendMessage(message.chatId, reply, message.messageId);
+  await gateway.sendMessage(
+    message.chatId,
+    reply,
+    message.messageId,
+    message.rawMessage,
+  );
 });
 
 async function main() {

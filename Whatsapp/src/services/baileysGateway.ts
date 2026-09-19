@@ -82,14 +82,17 @@ export class BaileysGateway implements WhatsAppGateway {
     chatId: string,
     text: string,
     replyToMessageId?: string,
+    quotedMessage?: import("@whiskeysockets/baileys").WAMessage,
   ): Promise<void> {
     if (!this.sock) {
       throw new Error("WhatsApp socket is not connected.");
     }
 
-    await this.sock.sendMessage(chatId, {
-      text,
-    });
+    await this.sock.sendMessage(
+      chatId,
+      { text },
+      quotedMessage ? { quoted: quotedMessage } : undefined,
+    );
 
     console.log(
       `WhatsApp message sent → ${chatId}${

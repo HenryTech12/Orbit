@@ -1,3 +1,4 @@
+import type { WAMessage } from "@whiskeysockets/baileys";
 export interface WhatsAppMessage {
   messageId: string;
   chatId: string;
@@ -7,6 +8,7 @@ export interface WhatsAppMessage {
   isGroup: boolean;
   timestamp: number;
   mentionedJids?: string[];
+  rawMessage?: WAMessage;
 }
 
 export interface WhatsAppReply {
