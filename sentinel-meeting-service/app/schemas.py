@@ -78,18 +78,19 @@ class TopicChangesOut(BaseModel):
     narrative: str
 
 
-# ---------- Zoom ----------
+# ---------- Meeting link detection (Zoom / Teams) ----------
 
-class ZoomDetectRequest(BaseModel):
+class MeetingDetectRequest(BaseModel):
     message: str
-    reference_time: Optional[datetime] = None  # "now", for resolving relative dates in tests
+    reference_time: Optional[datetime] = None  # lets callers/tests pin "now"
 
 
-class ZoomDetectionOut(BaseModel):
+class MeetingDetectionOut(BaseModel):
     id: str
     raw_message: str
-    zoom_url: Optional[str] = None
-    zoom_meeting_id: Optional[str] = None
+    platform: str  # zoom | teams | unknown
+    meeting_url: Optional[str] = None
+    platform_meeting_id: Optional[str] = None
     detected_datetime: Optional[datetime] = None
     title_guess: Optional[str] = None
     reminder_sent: bool
@@ -107,12 +108,14 @@ class ReminderOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
-class ZoomWebhookPayload(BaseModel):
-    """Mirrors the fields Zoom's real `recording.completed` webhook sends,
-    trimmed to what this service actually needs."""
-    zoom_meeting_id: str
+class MeetingWebhookPayload(BaseModel):
+    """Generalized recording-ready webhook payload, covering both Zoom's
+    real `recording.completed` event and the equivalent Microsoft Graph
+    notification for Teams."""
+    platform: str  # "zoom" | "teams"
+    platform_meeting_id: str
     detection_id: Optional[str] = None
-    topic: Optional[str] = "Zoom Meeting"
+    topic: Optional[str] = "Meeting"
     download_url: Optional[str] = None
     start_time: Optional[datetime] = None
 

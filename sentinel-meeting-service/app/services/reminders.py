@@ -14,10 +14,10 @@ from typing import List, Optional
 from sqlalchemy.orm import Session
 
 from app.config import settings
-from app.models import ReminderJob, ZoomDetection
+from app.models import ReminderJob, MeetingDetection
 
 
-def schedule_reminder(db: Session, detection: ZoomDetection) -> Optional[ReminderJob]:
+def schedule_reminder(db: Session, detection: MeetingDetection) -> Optional[ReminderJob]:
     if detection.detected_datetime is None:
         return None
 

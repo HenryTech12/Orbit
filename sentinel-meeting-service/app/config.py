@@ -22,13 +22,18 @@ class Settings:
     EMBEDDING_DIM: int = int(os.getenv("EMBEDDING_DIM", "384"))
 
     # Transcription backend: "stub" (deterministic, offline, used by
-    # default and in tests) or "openai" (real Whisper API - requires
+    # default and in tests), "groq" (Groq's hosted Whisper - fast, has a
+    # free tier), or "openai" (real Whisper API - requires
     # OPENAI_API_KEY).
     TRANSCRIPTION_BACKEND: str = os.getenv("TRANSCRIPTION_BACKEND", "stub")
     OPENAI_API_KEY: str = os.getenv("OPENAI_API_KEY", "")
+    GROQ_API_KEY: str = os.getenv("GROQ_API_KEY", "")
+    GROQ_WHISPER_MODEL: str = os.getenv("GROQ_WHISPER_MODEL", "whisper-large-v3-turbo")
 
     # Embedding backend: "stub" (deterministic hash-based, offline) or
-    # "openai".
+    # "openai". Groq does not offer an embeddings endpoint, so it isn't
+    # an option here - only for transcription and (outside this
+    # service) LLM generation.
     EMBEDDING_BACKEND: str = os.getenv("EMBEDDING_BACKEND", "stub")
 
     # Zoom API backend: "stub" (offline, used by default and in tests) or
@@ -37,6 +42,14 @@ class Settings:
     ZOOM_ACCOUNT_ID: str = os.getenv("ZOOM_ACCOUNT_ID", "")
     ZOOM_CLIENT_ID: str = os.getenv("ZOOM_CLIENT_ID", "")
     ZOOM_CLIENT_SECRET: str = os.getenv("ZOOM_CLIENT_SECRET", "")
+
+    # Microsoft Teams backend: "stub" (offline, default/tests) or "real"
+    # (requires an Azure AD app registration with admin consent on the
+    # tenant hosting the real meetings).
+    TEAMS_BACKEND: str = os.getenv("TEAMS_BACKEND", "stub")
+    MS_TENANT_ID: str = os.getenv("MS_TENANT_ID", "")
+    MS_CLIENT_ID: str = os.getenv("MS_CLIENT_ID", "")
+    MS_CLIENT_SECRET: str = os.getenv("MS_CLIENT_SECRET", "")
 
     # A topic is considered "stale" if its last update is older than this
     # many days (PRD Section 6.1).

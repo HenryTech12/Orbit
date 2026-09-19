@@ -24,6 +24,7 @@ class MeetingStatus(str, enum.Enum):
 
 class MeetingPlatform(str, enum.Enum):
     zoom = "zoom"
+    teams = "teams"
     google_meet = "google_meet"
     other = "other"
 
@@ -104,13 +105,14 @@ class TopicHistoryEntry(Base):
     topic = relationship("Topic", back_populates="history")
 
 
-class ZoomDetection(Base):
-    __tablename__ = "zoom_detections"
+class MeetingDetection(Base):
+    __tablename__ = "meeting_detections"
 
     id = Column(String, primary_key=True, default=gen_id)
     raw_message = Column(Text, nullable=False)
-    zoom_url = Column(String, nullable=True)
-    zoom_meeting_id = Column(String, nullable=True)
+    platform = Column(String, default="unknown")  # zoom | teams | unknown
+    meeting_url = Column(String, nullable=True)
+    platform_meeting_id = Column(String, nullable=True)
     detected_datetime = Column(DateTime, nullable=True)
     title_guess = Column(String, nullable=True)
     reminder_sent = Column(Boolean, default=False)
@@ -122,6 +124,6 @@ class ReminderJob(Base):
     __tablename__ = "reminder_jobs"
 
     id = Column(String, primary_key=True, default=gen_id)
-    detection_id = Column(String, ForeignKey("zoom_detections.id"), nullable=False)
+    detection_id = Column(String, ForeignKey("meeting_detections.id"), nullable=False)
     remind_at = Column(DateTime, nullable=False)
     sent = Column(Boolean, default=False)
