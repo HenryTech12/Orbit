@@ -1,7 +1,7 @@
 export async function withRetry<T>(
   operation: () => Promise<T>,
   maxAttempts = 3,
-  delayMs = 1000,
+  initialDelayMs = 1000,
 ): Promise<T> {
   let lastError: unknown;
 
@@ -14,6 +14,8 @@ export async function withRetry<T>(
       if (attempt === maxAttempts) {
         break;
       }
+
+      const delayMs = initialDelayMs * 2 ** (attempt - 1);
 
       await new Promise((resolve) => setTimeout(resolve, delayMs));
     }

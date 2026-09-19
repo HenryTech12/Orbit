@@ -25,6 +25,19 @@ export class BaileysGateway implements WhatsAppGateway {
     return this.sock?.user?.id;
   }
 
+  async stop(): Promise<void> {
+  if (!this.sock) {
+    return;
+  }
+
+  console.log("Stopping WhatsApp adapter...");
+
+  this.sock.end(undefined);
+  this.sock = undefined;
+
+  console.log("WhatsApp adapter stopped.");
+}
+
   async start(): Promise<void> {
     const { state, saveCreds } = await useMultiFileAuthState("auth_info");
 
@@ -61,7 +74,10 @@ export class BaileysGateway implements WhatsAppGateway {
       },
     );
 
-    this.sock.ev.on("messages.upsert", async ({ messages }) => {
+    this.sock.ev.on("messages.upsert", async ({ messages, type }) => {
+      if (type !== "notify") {
+        return;
+      }
       console.log(
         "Incoming WhatsApp event:",
         JSON.stringify(messages, null, 2),

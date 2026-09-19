@@ -33,3 +33,13 @@ main().catch((error) => {
   console.error("Adapter error:", error);
   process.exit(1);
 });
+
+process.on("SIGINT", async () => {
+  await gateway.stop();
+  process.exit(0);
+});
+
+process.on("SIGTERM", async () => {
+  await gateway.stop();
+  process.exit(0);
+});
