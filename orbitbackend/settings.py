@@ -42,12 +42,13 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    'django.contrib.postgres',
     'rest_framework',
     'corsheaders',
     'django_celery_beat',
     'django_celery_results',
-    'core',
-    'orbitbackend.messages',
+    'orbitbackend.core',
+    'orbitbackend',
 ]
 
 MIDDLEWARE = [

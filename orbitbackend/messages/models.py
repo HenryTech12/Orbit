@@ -1,7 +1,9 @@
 from django.db import models
 
+from orbitbackend.softdelete import SoftDeleteModel
 
-class Message(models.Model):
+
+class Message(SoftDeleteModel):
     class SourceType(models.TextChoices):
         WHATSAPP = 'whatsapp', 'WhatsApp'
         MEETING_TRANSCRIPT = 'meeting_transcript', 'Meeting Transcript'
