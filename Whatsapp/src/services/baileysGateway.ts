@@ -11,6 +11,8 @@ import { normalizeWhatsAppMessage } from "./messageNormalizer.js";
 
 export class BaileysGateway implements WhatsAppGateway {
   private sock?: ReturnType<typeof makeWASocket>;
+  private processedMessageKeys = new Set<string>();
+  private readonly maxProcessedMessageKeys = 1000;
   private messageHandler:
     | ((message: WhatsAppMessage) => Promise<void>)
     | undefined;
@@ -65,8 +67,29 @@ export class BaileysGateway implements WhatsAppGateway {
         JSON.stringify(messages, null, 2),
       );
       for (const message of messages) {
-        const normalizedMessage = normalizeWhatsAppMessage(message);
+        const messageKey = JSON.stringify({
+          remoteJid: message.key.remoteJid,
+          participant: message.key.participant,
+          fromMe: message.key.fromMe,
+          id: message.key.id,
+        });
+        if (messageKey && this.processedMessageKeys.has(messageKey)) {
+          console.log(`Skipping duplicate WhatsApp message: ${messageKey}`);
+          continue;
+        }
 
+        if (messageKey) {
+          this.processedMessageKeys.add(messageKey);
+          if (this.processedMessageKeys.size > this.maxProcessedMessageKeys) {
+            const oldestKey = this.processedMessageKeys.values().next().value;
+
+            if (oldestKey) {
+              this.processedMessageKeys.delete(oldestKey);
+            }
+          }
+        }
+
+        const normalizedMessage = normalizeWhatsAppMessage(message);
         if (!normalizedMessage) {
           continue;
         }
@@ -81,7 +104,7 @@ export class BaileysGateway implements WhatsAppGateway {
   async sendMessage(
     chatId: string,
     text: string,
-    replyToMessageId?: string,
+    replyToMessageKey?: string,
     quotedMessage?: import("@whiskeysockets/baileys").WAMessage,
   ): Promise<void> {
     if (!this.sock) {
@@ -96,7 +119,7 @@ export class BaileysGateway implements WhatsAppGateway {
 
     console.log(
       `WhatsApp message sent → ${chatId}${
-        replyToMessageId ? ` (reply to ${replyToMessageId})` : ""
+        replyToMessageKey ? ` (reply to ${replyToMessageKey})` : ""
       }`,
     );
   }
