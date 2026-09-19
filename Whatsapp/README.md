@@ -2,7 +2,7 @@
 
 The WhatsApp adapter connects **Sentinel — Community Knowledge Intelligence Platform** to WhatsApp groups and direct messages.
 
-It provides the transport layer between WhatsApp and the Sentinel backend:
+It provides the transport and WhatsApp integration layer between WhatsApp and Sentinel's grounded knowledge system.
 
 ```text
 WhatsApp
@@ -13,7 +13,7 @@ Message Normalization
     ↓
 Message Ingestion
     ↓
-Sentinel Copilot API
+Local Knowledge / Sentinel Copilot API
     ↓
 Grounded Answer + Trust + Sources
     ↓
@@ -29,12 +29,16 @@ The adapter is responsible for:
 - Normalizing WhatsApp messages into a stable internal format
 - Ingesting incoming messages into the Sentinel knowledge pipeline
 - Detecting Sentinel mentions
-- Sending questions to the Sentinel Copilot API
+- Supporting historical WhatsApp `.txt` exports
+- Retrieving relevant local WhatsApp evidence
+- Generating grounded answers using Gemini in local mode
 - Sending grounded responses back to WhatsApp
-- Importing historical WhatsApp `.txt` exports
-- Supporting both mock and real backend modes
+- Supporting both local knowledge mode and real backend mode
+- Protecting against duplicate message events
+- Retrying transient processing and sending failures
+- Supporting actual quoted WhatsApp replies
 
-The adapter intentionally does **not** implement retrieval, embeddings, LLM reasoning, contradiction detection, or knowledge-base logic. Those responsibilities belong to the Sentinel backend.
+The adapter keeps WhatsApp-specific transport concerns separate from Sentinel's knowledge and reasoning components.
 
 ---
 
@@ -57,25 +61,62 @@ The adapter intentionally does **not** implement retrieval, embeddings, LLM reas
 - [x] Actual WhatsApp mention metadata
 - [x] `@sentinel` text detection
 - [x] Sentinel JID detection
-- [x] Mock Copilot responses
-- [x] WhatsApp group replies
-- [x] Real WhatsApp message sending
-- [x] Single-message ingestion interface
-- [x] Batch historical-message ingestion interface
+- [x] Local WhatsApp history loading
 - [x] WhatsApp `.txt` export parsing
 - [x] Historical chat import command
+- [x] Local keyword/date-aware retrieval
+- [x] Local Gemini Copilot
+- [x] Grounded answers from exported WhatsApp history
+- [x] Source citations in WhatsApp responses
+- [x] Trust status output
+- [x] `/summary` command
+- [x] "What did I miss?" catch-up normalization
+- [x] WhatsApp group replies
+- [x] Direct-message replies
+- [x] Real WhatsApp message sending
+- [x] Actual quoted WhatsApp replies
+- [x] Single-message ingestion interface
+- [x] Batch historical-message ingestion interface
 - [x] Self-message protection
+- [x] Duplicate-message event protection
+- [x] Bounded in-memory duplicate tracking
+- [x] Retry handling with exponential backoff
+- [x] Graceful shutdown
+- [x] Unsupported-media guard
 - [x] TypeScript build
+
+### Current local knowledge flow
+
+The current development mode does not depend on the Sentinel backend.
+
+```text
+WhatsApp .txt Export
+        ↓
+WhatsApp Export Parser
+        ↓
+Local WhatsApp Knowledge Store
+        ↓
+Keyword + Date-aware Retrieval
+        ↓
+Gemini
+        ↓
+Grounded Answer + Sources
+        ↓
+WhatsApp
+```
+
+The current exported team conversation contains **188 WhatsApp messages** and is used as the temporary local knowledge source while the backend is being finalized.
 
 ### Not yet implemented
 
-- [ ] Real Sentinel backend `/copilot/ask` integration testing
-- [ ] Production ingestion endpoint integration
-- [ ] API timeout and retry strategy
-- [ ] Duplicate-message protection
+- [ ] Real Sentinel backend `/copilot/ask` end-to-end integration testing
+- [ ] Production ingestion endpoint integration testing
 - [ ] Conversation/group retrieval scoping
-- [ ] Actual quoted WhatsApp replies
-- [ ] More WhatsApp export date/locale formats
+- [ ] Persistent duplicate-message storage
+- [ ] Persistent local knowledge database
+- [ ] Semantic/vector retrieval in the local mode
+- [ ] Robust conflict detection
+- [ ] Dynamic trust classification
 - [ ] Production deployment configuration
 
 ---
@@ -85,11 +126,14 @@ The adapter intentionally does **not** implement retrieval, embeddings, LLM reas
 - **TypeScript**
 - **Node.js**
 - **Baileys**
+- **Google Gemini API / `@google/genai`**
 - **dotenv**
 - **tsx**
 - **qrcode-terminal**
 
 Baileys provides the WebSocket-based interface used to communicate with WhatsApp Web.
+
+Gemini is used by the temporary local Copilot mode to generate grounded answers from retrieved WhatsApp evidence.
 
 ---
 
@@ -97,6 +141,9 @@ Baileys provides the WebSocket-based interface used to communicate with WhatsApp
 
 ```text
 Whatsapp/
+├── data/
+│   └── chat-orbit-team.txt
+│
 ├── src/
 │   ├── api/
 │   │   ├── copilotApi.ts
@@ -105,6 +152,13 @@ Whatsapp/
 │   ├── importers/
 │   │   ├── whatsappExportParser.ts
 │   │   └── importWhatsAppHistory.ts
+│   │
+│   ├── local/
+│   │   ├── localCopilot.ts
+│   │   ├── localRetriever.ts
+│   │   ├── testLocalCopilot.ts
+│   │   ├── testLocalRetriever.ts
+│   │   └── whatsappKnowledgeStore.ts
 │   │
 │   ├── mock/
 │   │   └── mockData.ts
@@ -120,6 +174,9 @@ Whatsapp/
 │   ├── types/
 │   │   ├── sentinel.ts
 │   │   └── whatsapp.ts
+│   │
+│   ├── utils/
+│   │   └── retry.ts
 │   │
 │   └── index.ts
 │
@@ -148,16 +205,16 @@ processIncomingMessage()
        ↓
 handleMessage()
        ↓
-Copilot API
+Local Copilot / Sentinel API
 ```
 
-The current production implementation is:
+The current production WhatsApp transport implementation is:
 
 ```text
 BaileysGateway
 ```
 
-A mock gateway can be used for local development and testing.
+A gateway abstraction also allows local development and testing without tightly coupling the application to the underlying WhatsApp transport.
 
 ---
 
@@ -170,19 +227,19 @@ Incoming WhatsApp Message
           ↓
      BaileysGateway
           ↓
-  Message Normalizer
+    Message Normalizer
           ↓
-   WhatsAppMessage
+     WhatsAppMessage
           ↓
-  WhatsApp Service
+    Message Ingestion
           ↓
-    Ingestion API
+    Mention Detection
           ↓
-   Mention Detection
+ Local Copilot / Backend Copilot
           ↓
-      Copilot API
+     Grounded Response
           ↓
-   WhatsApp Response
+      WhatsApp Reply
 ```
 
 Messages are ingested before Sentinel decides whether to respond.
@@ -208,7 +265,7 @@ export interface WhatsAppMessage {
 }
 ```
 
-This prevents the rest of the application from depending directly on Baileys message structures.
+The normalized structure prevents the rest of the application from depending directly on Baileys message structures.
 
 ---
 
@@ -226,15 +283,13 @@ Sentinel supports two mention mechanisms.
 
 A user can select the Sentinel-connected WhatsApp account using WhatsApp's mention UI.
 
-Baileys provides the actual mentioned JID through WhatsApp message context metadata.
-
-The adapter normalizes this into:
+The actual mentioned JID is available through WhatsApp message context metadata and is normalized into:
 
 ```ts
 mentionedJids: string[]
 ```
 
-The detector then checks:
+The detector checks:
 
 ```text
 Literal @sentinel
@@ -246,33 +301,87 @@ This allows the application to distinguish ordinary conversation from questions 
 
 ---
 
-## Mock Mode
+## Local Knowledge Mode
 
-The adapter currently supports mock mode so WhatsApp development can continue before the Sentinel backend is available.
+The current development configuration uses the exported WhatsApp conversation as a local knowledge source while the Sentinel backend is being finalized.
 
 `.env`:
 
 ```env
 WHATSAPP_USE_MOCK=true
 SENTINEL_API_BASE_URL=http://localhost:8000/api/v1
+GEMINI_API_KEY=your_gemini_api_key
 ```
 
-In mock mode:
-
-- Copilot responses come from local mock data.
-- Ingestion is logged locally.
-- No Sentinel backend is required.
-
-Example response:
+Despite the historical `WHATSAPP_USE_MOCK` variable name, `true` currently enables the **local development path**:
 
 ```text
-Milestone 1 is due Tuesday, September 22, 2026 at 6:00 PM EAT.
-
-Trust: CONFIRMED
-
-Sources:
-• WhatsApp Team Discussion: Milestone 1 submission deadline is Tuesday at 6:00 PM EAT.
+WhatsApp
+   ↓
+Local WhatsApp History
+   ↓
+Local Retrieval
+   ↓
+Gemini
+   ↓
+Answer + Sources
 ```
+
+The local mode does not require the Sentinel backend to answer questions.
+
+### Local knowledge source
+
+The current local knowledge source is:
+
+```text
+data/chat-orbit-team.txt
+```
+
+The export is parsed into normalized `WhatsAppMessage` objects and cached by the local knowledge store.
+
+### Local retrieval
+
+The local retriever currently performs lightweight retrieval using:
+
+- normalized keyword matching
+- intent-aware terms
+- date-aware matching
+- phrase matching
+- relevance scoring
+- timestamp-based tie breaking
+
+For example:
+
+```text
+Question:
+What did we plan for September 22?
+
+Retrieved evidence:
+Sept 22 — WhatsApp / integration
+
+If API access is available:
+WhatsApp → API → RAG → WhatsApp
+
+If not:
+Build the adapter interface and focus on the core product.
+```
+
+### Local Gemini Copilot
+
+The retrieved WhatsApp evidence is passed to Gemini with grounding instructions.
+
+The model is instructed to:
+
+- Use only the supplied WhatsApp evidence
+- Avoid outside knowledge
+- Avoid inventing facts
+- Prefer direct evidence
+- State when evidence is insufficient
+- Produce concise WhatsApp-friendly answers
+
+This implements the core Sentinel principle:
+
+> **No evidence → no confident answer.**
 
 ---
 
@@ -285,7 +394,9 @@ WHATSAPP_USE_MOCK=false
 SENTINEL_API_BASE_URL=http://localhost:8000/api/v1
 ```
 
-The adapter expects the backend to provide:
+The adapter then routes Copilot requests to the Sentinel backend.
+
+Expected endpoints:
 
 ```text
 POST /copilot/ask
@@ -317,7 +428,7 @@ This is useful for conversations that happened **before Sentinel joined the grou
 npm run import:whatsapp -- .\chat.txt
 ```
 
-The flow is:
+The import flow is:
 
 ```text
 WhatsApp .txt Export
@@ -326,10 +437,166 @@ whatsappExportParser
         ↓
 WhatsAppMessage[]
         ↓
-whatsappHistoryService
-        ↓
 ingestionApi.ingestMessages()
 ```
+
+The current team export successfully imports:
+
+```text
+188 WhatsApp messages
+```
+
+The parser supports multiline messages and WhatsApp exports containing 12-hour AM/PM timestamps.
+
+---
+
+## Copilot Responses
+
+Sentinel formats Copilot responses for WhatsApp using:
+
+```text
+Answer
+
+Trust: CONFIRMED
+
+Sources:
+• WhatsApp — Sender: relevant source excerpt
+```
+
+The current response pipeline provides source excerpts alongside generated answers so users can inspect the evidence behind a response.
+
+Trust classification is currently being developed further and should not be treated as a final production-grade confidence system.
+
+---
+
+## `/summary`
+
+The adapter supports a `/summary` command for team-level summary responses.
+
+Example:
+
+```text
+/summary
+```
+
+The response includes:
+
+```text
+Summary
+
+Trust: ...
+
+Sources:
+• ...
+```
+
+The command is part of the current development/demo functionality.
+
+---
+
+## Catch-Up Questions
+
+The adapter recognizes catch-up questions such as:
+
+```text
+@sentinel What did I miss?
+```
+
+and normalizes them into a more explicit knowledge query covering:
+
+- recent updates
+- decisions
+- deadlines
+- action items
+- meetings
+
+This allows the Copilot layer to retrieve evidence relevant to team catch-up questions.
+
+---
+
+## Unsupported Media
+
+The current Sentinel WhatsApp adapter is text-first.
+
+For unsupported media messages that are explicitly addressed to Sentinel, the adapter returns:
+
+```text
+Sentinel currently supports text questions only.
+Document and media understanding is not enabled yet.
+```
+
+Media without a usable text/caption does not trigger a Sentinel response.
+
+Future versions may add document, image, audio, and video understanding.
+
+---
+
+## Duplicate Message Protection
+
+The adapter protects against duplicate WhatsApp event processing using an in-memory set of processed message keys.
+
+The key includes:
+
+```text
+remoteJid
+participant
+fromMe
+message id
+```
+
+The set is bounded to prevent unbounded memory growth.
+
+This protects against duplicate event delivery during the current process lifetime.
+
+Persistent idempotency is still required for production deployment.
+
+---
+
+## Retry Handling
+
+Transient processing and sending failures are handled through a retry helper using exponential backoff.
+
+The current strategy retries up to three attempts.
+
+Conceptually:
+
+```text
+Attempt 1
+   ↓
+failure
+   ↓
+wait
+   ↓
+Attempt 2
+   ↓
+failure
+   ↓
+wait longer
+   ↓
+Attempt 3
+```
+
+The backend and WhatsApp operations can therefore recover from some transient failures without immediately failing the entire message flow.
+
+---
+
+## Actual Quoted Replies
+
+When responding to an incoming WhatsApp message, the adapter can send the response as an actual WhatsApp quoted reply.
+
+Conceptually:
+
+```text
+User message
+     ↓
+Sentinel processing
+     ↓
+Quoted Sentinel response
+```
+
+This makes it clear which message Sentinel is answering, especially in active group conversations.
+
+Baileys supports quoted messages through the `quoted` send option.
 
 ---
 
@@ -363,14 +630,18 @@ Create a local `.env` file:
 ```env
 WHATSAPP_USE_MOCK=true
 SENTINEL_API_BASE_URL=http://localhost:8000/api/v1
+GEMINI_API_KEY=your_gemini_api_key
 ```
 
 ### Variables
 
 | Variable | Description |
 |---|---|
-| `WHATSAPP_USE_MOCK` | Enables mock Copilot and ingestion behavior |
+| `WHATSAPP_USE_MOCK` | Selects the current local development path when `true`; selects backend integration when `false` |
 | `SENTINEL_API_BASE_URL` | Base URL of the Sentinel backend |
+| `GEMINI_API_KEY` | API key used by the local Gemini Copilot |
+
+Never commit the actual `.env` file or API keys.
 
 ---
 
@@ -435,7 +706,41 @@ npm run import:whatsapp -- .\chat.txt
 Example successful output:
 
 ```text
-Successfully imported 3 WhatsApp messages.
+Successfully imported 188 WhatsApp messages.
+```
+
+---
+
+## Local Copilot Testing
+
+Test the local retriever:
+
+```powershell
+npx tsx src/local/testLocalRetriever.ts
+```
+
+Test the local Gemini Copilot:
+
+```powershell
+npx tsx src/local/testLocalCopilot.ts
+```
+
+Example question:
+
+```text
+What did we plan for September 22?
+```
+
+Expected grounded answer:
+
+```text
+For September 22, the plan was WhatsApp / integration.
+
+If API access is available:
+WhatsApp → API → RAG → WhatsApp.
+
+If API access is not available:
+Build the adapter interface and focus on the core product.
 ```
 
 ---
@@ -449,11 +754,13 @@ Important rules:
 - Never commit `.env`
 - Never commit `auth_info/`
 - Never expose WhatsApp authentication credentials
+- Never expose `GEMINI_API_KEY`
 - Avoid logging message contents in production
 - Restrict knowledge retrieval by conversation/group when the backend supports it
 - Validate backend responses before sending them to WhatsApp
-- Implement duplicate-message protection before production deployment
-- Implement retry and timeout handling for backend failures
+- Use persistent idempotency before production deployment
+- Protect exported WhatsApp history because it may contain private conversations
+- Do not deploy exported team data to an uncontrolled environment
 
 ---
 
@@ -468,34 +775,54 @@ WhatsApp
    ↓
 Adapter
    ↓
-Sentinel API
+Sentinel Knowledge System
 ```
 
 ### 2. Normalization
 
 Baileys-specific message structures are converted into the application's own `WhatsAppMessage` type.
 
-### 3. Backend ownership
+### 3. Grounded answers
 
-The adapter does not perform:
+The Copilot should answer from retrieved evidence rather than relying on unsupported assumptions.
 
-- Vector search
-- Keyword search
-- Embedding generation
-- LLM reasoning
-- Contradiction detection
-- Trust classification
-- Knowledge ranking
+```text
+Question
+   ↓
+Retrieve evidence
+   ↓
+Grounded generation
+   ↓
+Answer + Sources
+```
 
-Those capabilities belong to Sentinel's backend.
+### 4. Evidence-first reasoning
 
-### 4. Grounded responses
-
-The final Sentinel response should follow the platform's core principle:
+The core Sentinel principle is:
 
 > **No evidence → no confident answer.**
 
-Responses should include trust status and source information whenever available.
+Responses should include source information whenever evidence is available.
+
+### 5. Backend separation
+
+In the final architecture, retrieval, embeddings, ranking, reasoning, contradiction detection, and trust classification belong to the Sentinel knowledge system.
+
+The current local development mode temporarily performs lightweight retrieval locally because the backend is not yet available.
+
+### 6. Adapter simplicity
+
+The WhatsApp adapter should remain focused on:
+
+- WhatsApp connectivity
+- Message normalization
+- Message ingestion
+- Mention detection
+- Copilot request routing
+- Response formatting
+- WhatsApp delivery
+
+Complex knowledge functionality should not permanently accumulate inside the WhatsApp adapter.
 
 ---
 
@@ -508,32 +835,54 @@ Responses should include trust status and source information whenever available.
 - [x] Normalize messages
 - [x] Detect mentions
 - [x] Send replies
+- [x] Support quoted replies
 - [x] Import historical conversations
+- [x] Protect against duplicate events
+- [x] Retry transient failures
+- [x] Graceful shutdown
 
-### Phase 2 — Backend integration
+### Phase 2 — Local knowledge development
+
+- [x] Parse WhatsApp export
+- [x] Load local WhatsApp history
+- [x] Lightweight local retrieval
+- [x] Date-aware retrieval
+- [x] Gemini grounded generation
+- [x] Source citations
+- [x] Local Copilot testing
+- [x] End-to-end WhatsApp local knowledge flow
+
+### Phase 3 — Backend integration
 
 - [ ] Connect real `/copilot/ask`
 - [ ] Connect real ingestion endpoint
-- [ ] Handle API timeouts
-- [ ] Add retry strategy
 - [ ] Validate API responses
+- [ ] Verify API timeout handling
+- [ ] Verify retry behavior against real backend failures
+- [ ] Verify conversation/group scoping
 
-### Phase 3 — Reliability
+### Phase 4 — Reliability and trust
 
-- [ ] Duplicate-message protection
-- [ ] Idempotent ingestion
-- [ ] Conversation scoping
-- [ ] Better reconnect handling
-- [ ] Production logging
+- [ ] Dynamic trust classification
+- [ ] Conflict detection
+- [ ] Stale-information detection
+- [ ] Persistent idempotency
+- [ ] Semantic/vector retrieval
+- [ ] Evaluation dataset
+- [ ] Hallucination testing
+- [ ] Wrong-source testing
+- [ ] Missing-information testing
 
-### Phase 4 — Judge/demo experience
+### Phase 5 — Judge/demo experience
 
 - [ ] Concise WhatsApp responses
 - [ ] Trust indicators
 - [ ] Source citations
-- [ ] Actual quoted replies
-- [ ] Catch-up and deadline intelligence
+- [ ] Catch-up intelligence
+- [ ] Deadline intelligence
+- [ ] Meeting intelligence
 - [ ] End-to-end live demo
+- [ ] Production deployment
 
 ---
 
