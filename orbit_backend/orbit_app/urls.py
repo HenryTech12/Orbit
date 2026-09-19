@@ -17,7 +17,15 @@ Including another URLconf
 from django.contrib import admin
 from django.urls import include, path
 
+from orbit_app.core.views import ChatCopilotView
+
+views_chat_copilot = ChatCopilotView.as_view()
+views_chat_copilot_noslash = ChatCopilotView.as_view()
+
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('api/', include('orbit_app.core.urls')),
+    # Standalone alias so POST /copilot/ask works with or without /api prefix.
+    path('copilot/ask/', views_chat_copilot, name='copilot-ask-root'),
+    path('copilot/ask', views_chat_copilot_noslash, name='copilot-ask-root-noslash'),
 ]

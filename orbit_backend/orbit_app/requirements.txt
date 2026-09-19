@@ -7,3 +7,11 @@ celery==5.6.3
 redis==8.1.0
 django-celery-beat==2.9.0
 django-celery-results==2.6.0
+langchain-text-splitters==0.3.0
+sentence-transformers==3.3.1
+tiktoken==0.9.0
+requests==2.32.3
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch
+groq==0.13.1
+langchain-groq==0.2.5
