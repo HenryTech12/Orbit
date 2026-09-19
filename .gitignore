@@ -1,0 +1,11 @@
+.env
+*.db
+.venv/
+__pycache__/
+.pytest_cache/
+data/
+*.mp3
+*.mp4
+whatsapp-bridge/auth/
+whatsapp-bridge/node_modules/
+whatsapp-bridge/.env
