@@ -13,7 +13,7 @@ from .services import EngineError, get_engine_client
 
 
 class EngineView(APIView):
-    """Base view: calls the engine and maps engine failures to API responses."""
+    """Base view: calls the engine and maps engine failures to API responses. """
 
     def handle_exception(self, exc):
         if isinstance(exc, EngineError):
