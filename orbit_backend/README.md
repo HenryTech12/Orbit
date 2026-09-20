@@ -48,15 +48,17 @@ Clients call this backend, never the engine directly. `/api/engine/...` proxies 
 ## Running it
 
 ```
-cp .env.example .env               # then fill in the values
-docker compose -p orbit up -d      # Postgres 16, Redis, Adminer (localhost:8081)
-pip install -r orbit_app/requirements.txt
-python orbit_app/manage.py migrate
+cp .env.example .env               # then fill in the values (including ORBIT_API_KEYS)
+docker compose up -d --build       # Django API (localhost:8000), Postgres 16, Redis, Adminer (localhost:8081)
 ```
 
-- Postgres is on host port `5433`.
-- Use `-p orbit` so Compose keeps using the existing containers and data volume. Without it, running from this folder creates a fresh, empty database.
+- The `web` container runs `migrate` and then the Django dev server on start. Code is bind-mounted, so edits reload automatically.
+- Logs: `docker compose logs -f web`. Run a command inside it: `docker compose exec web python orbit_app/manage.py <command>`.
+- After changing `requirements.txt` or the `Dockerfile`, rebuild with `docker compose up -d --build`.
+- Postgres is on host port `5433`. Inside Docker the app reaches it as `postgres:5432` (set by `docker-compose.yml`, so `POSTGRES_HOST` in `.env` only matters when running Django outside Docker).
+- The compose project is named `orbit` (`name:` in `docker-compose.yml`), so it always reuses the same containers and volumes no matter which folder you run it from.
 - Changing `POSTGRES_PASSWORD` in `.env` doesn't change the password of an existing volume. Run `ALTER USER` inside Postgres as well.
+- Without Docker: `pip install -r orbit_app/requirements.txt` then `python orbit_app/manage.py runserver`.
 
 ## Known limitations
 
