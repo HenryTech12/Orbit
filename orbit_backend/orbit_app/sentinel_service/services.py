@@ -4,20 +4,20 @@ from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
 
-class EngineError(Exception):
-    """The engine service was unreachable or returned an error."""
+class SentinelError(Exception):
+    """sentinel-backend-service was unreachable or returned an error."""
 
     def __init__(self, message, status_code=None):
         super().__init__(message)
         self.status_code = status_code
 
 
-class EngineClient:
+class SentinelClient:
     """Thin client for the external meeting / contradiction / pgvector service."""
 
     def __init__(self, base_url=None, api_key=None, timeout=None):
-        self.base_url = (base_url or settings.ORBIT_ENGINE_URL).rstrip('/')
-        self.timeout = timeout or settings.ORBIT_ENGINE_TIMEOUT
+        self.base_url = (base_url or settings.SENTINEL_SERVICE_URL).rstrip('/')
+        self.timeout = timeout or settings.SENTINEL_SERVICE_TIMEOUT
         self.session = requests.Session()
         # Connection errors are retried for every method (nothing was sent yet);
         # 5xx responses are retried for GET only, so POSTs are never duplicated.
@@ -30,7 +30,7 @@ class EngineClient:
         )
         self.session.mount('https://', HTTPAdapter(max_retries=retry))
         self.session.mount('http://', HTTPAdapter(max_retries=retry))
-        api_key = api_key if api_key is not None else settings.ORBIT_ENGINE_API_KEY
+        api_key = api_key if api_key is not None else settings.SENTINEL_SERVICE_API_KEY
         if api_key:
             self.session.headers['Authorization'] = f'Bearer {api_key}'
 
@@ -39,9 +39,9 @@ class EngineClient:
         try:
             response = self.session.request(method, url, timeout=self.timeout, **kwargs)
         except requests.RequestException as exc:
-            raise EngineError(f'{method} {path} failed: {exc}') from exc
+            raise SentinelError(f'{method} {path} failed: {exc}') from exc
         if not response.ok:
-            raise EngineError(
+            raise SentinelError(
                 f'{method} {path} returned {response.status_code}: {response.text[:300]}',
                 status_code=response.status_code,
             )
@@ -114,5 +114,5 @@ class EngineClient:
         return self._request('POST', '/vectors/search', json={'query': query, 'top_k': top_k})
 
 
-def get_engine_client():
-    return EngineClient()
+def get_sentinel_client():
+    return SentinelClient()

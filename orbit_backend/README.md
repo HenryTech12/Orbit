@@ -2,7 +2,7 @@
 
 ## ORBITBACKEND
 
-Django REST backend for Orbit. It stores messages and calls the Orbit engine service (https://orbit-e873.onrender.com, docs at `/docs`), which owns meeting processing, topic trust status and history, Zoom/Teams link detection and vector search. Clients talk to this backend, which is protected by an API key, and never to the engine directly.
+Django REST backend for Orbit. It stores messages and calls `sentinel-backend-service` (https://orbit-e873.onrender.com, docs at `/docs`), which owns meeting processing, topic trust status and history, Zoom/Teams link detection and vector search. Clients talk to this backend, which is protected by an API key, and never to `sentinel-backend-service` directly.
 
 ## Contents
 
@@ -23,7 +23,7 @@ orbit_backend/
 └── orbit_app/                 the single Django app + project
     ├── manage.py, requirements.txt, settings.py, celery.py, urls.py
     ├── core/                  health check and API-key authentication
-    ├── engine/                client, views and URLs for the engine service
+    ├── sentinel_service/      client, views and URLs for `sentinel-backend-service`
     ├── messages/              messages table
     ├── softdelete.py          soft-delete base model
     └── migrations/
@@ -77,7 +77,7 @@ python3 -c "import secrets; print(secrets.token_urlsafe(32))"    # ORBIT_API_KEY
 
 - `.env` is gitignored. Never commit it or share the keys.
 - `ORBIT_API_KEYS` can hold several keys, comma-separated. Give each client its own.
-- Optional settings: `ORBIT_ENGINE_URL` (defaults to the deployed engine), `ORBIT_ENGINE_API_KEY` (for when the engine adds authentication), `ORBIT_ENGINE_TIMEOUT` (seconds, default 90) and `WEB_PORT` (default 8000).
+- Optional settings: `SENTINEL_SERVICE_URL` (defaults to the deployed `sentinel-backend-service`), `SENTINEL_SERVICE_API_KEY` (for when `sentinel-backend-service` adds authentication), `SENTINEL_SERVICE_TIMEOUT` (seconds, default 90) and `WEB_PORT` (default 8000).
 
 ### 2. Start everything with Docker
 
@@ -146,23 +146,23 @@ Send your key on every request except health, as `X-API-Key: <key>` or `Authoriz
 | GET | `/api/health/` | none | Health check (no key needed) |
 | GET | `/admin/` | none | Django admin (browser login) |
 | **Topics** | | | |
-| GET | `/api/engine/topics/` | none | List topics |
-| POST | `/api/engine/topics/` | `{"label": "Launch date"}` | Create a topic (409 if it exists) |
-| GET | `/api/engine/topics/{topic_id}/` | none | Get one topic |
-| POST | `/api/engine/topics/{topic_id}/history/` | see below | Add a history entry |
-| GET | `/api/engine/topics/{topic_id}/changes/` | none | History plus a "what changed" narrative |
+| GET | `/api/sentinel/topics/` | none | List topics |
+| POST | `/api/sentinel/topics/` | `{"label": "Launch date"}` | Create a topic (409 if it exists) |
+| GET | `/api/sentinel/topics/{topic_id}/` | none | Get one topic |
+| POST | `/api/sentinel/topics/{topic_id}/history/` | see below | Add a history entry |
+| GET | `/api/sentinel/topics/{topic_id}/changes/` | none | History plus a "what changed" narrative |
 | **Meetings** | | | |
-| GET | `/api/engine/meetings/` | none | List meetings |
-| POST | `/api/engine/meetings/` | see below | Create a meeting |
-| GET | `/api/engine/meetings/{meeting_id}/` | none | Get one meeting |
-| POST | `/api/engine/meetings/{meeting_id}/process/` | none | Transcribe, chunk, embed and store (slow) |
+| GET | `/api/sentinel/meetings/` | none | List meetings |
+| POST | `/api/sentinel/meetings/` | see below | Create a meeting |
+| GET | `/api/sentinel/meetings/{meeting_id}/` | none | Get one meeting |
+| POST | `/api/sentinel/meetings/{meeting_id}/process/` | none | Transcribe, chunk, embed and store (slow) |
 | **Meeting links** | | | |
-| POST | `/api/engine/meeting-links/detect/` | see below | Find a Zoom/Teams link and time in a chat message |
-| GET | `/api/engine/meeting-links/detections/` | none | List detections |
-| GET | `/api/engine/meeting-links/reminders/due/` | none | Reminders that are due |
-| POST | `/api/engine/meeting-links/reminders/{reminder_id}/sent/` | none | Mark a reminder as sent |
+| POST | `/api/sentinel/meeting-links/detect/` | see below | Find a Zoom/Teams link and time in a chat message |
+| GET | `/api/sentinel/meeting-links/detections/` | none | List detections |
+| GET | `/api/sentinel/meeting-links/reminders/due/` | none | Reminders that are due |
+| POST | `/api/sentinel/meeting-links/reminders/{reminder_id}/sent/` | none | Mark a reminder as sent |
 | **Vector search** | | | |
-| POST | `/api/engine/vectors/search/` | `{"query": "shipping date", "top_k": 5}` | Nearest-neighbour search (`top_k` is 1 to 50) |
+| POST | `/api/sentinel/vectors/search/` | `{"query": "shipping date", "top_k": 5}` | Nearest-neighbour search (`top_k` is 1 to 50) |
 
 **Request bodies**
 
@@ -199,9 +199,9 @@ Detect a meeting link:
 
 **Example with curl**
 ```
-curl -H "X-API-Key: $ORBIT_KEY" http://localhost:8000/api/engine/topics/
+curl -H "X-API-Key: $ORBIT_KEY" http://localhost:8000/api/sentinel/topics/
 
-curl -X POST http://localhost:8000/api/engine/topics/ \
+curl -X POST http://localhost:8000/api/sentinel/topics/ \
   -H "X-API-Key: $ORBIT_KEY" -H "Content-Type: application/json" \
   -d '{"label": "Launch date"}'
 ```
@@ -213,17 +213,17 @@ curl -X POST http://localhost:8000/api/engine/topics/ \
 | 200 / 201 | Success |
 | 400 | The body failed validation (the message names the field) |
 | 401 | Key missing or wrong |
-| 409 | Duplicate topic (passed through from the engine) |
-| 502 | The engine was unreachable or failed |
+| 409 | Duplicate topic (passed through from `sentinel-backend-service`) |
+| 502 | `sentinel-backend-service` was unreachable or failed |
 
-The first call that reaches the engine after a quiet period can take up to a minute, because it runs on Render's free tier and sleeps.
+The first call that reaches `sentinel-backend-service` after a quiet period can take up to a minute, because it runs on Render's free tier and sleeps.
 
 ## Authentication
 
 - Every route except `/api/health/` requires an API key. The check is in `orbit_app/core/auth.py`.
 - Valid keys are listed in `ORBIT_API_KEYS`. With no keys configured, every request is rejected.
 - A missing key returns `Authentication credentials were not provided.`. A wrong key returns `Invalid API key.`.
-- The engine itself has no authentication yet, so keep its URL out of client apps. When it gets a key check, set `ORBIT_ENGINE_API_KEY` and the client sends it as a Bearer token.
+- `sentinel-backend-service` itself has no authentication yet, so keep its URL out of client apps. When it gets a key check, set `SENTINEL_SERVICE_API_KEY` and the client sends it as a Bearer token.
 
 ## Data model
 
@@ -231,7 +231,7 @@ The first call that reaches the engine after a quiet period can take up to a min
 |---|---|
 | `messages` | `message_id`, `source_type`, `sender`, `timestamp`, `raw_text`, `authority_level`, `deleted_at` |
 
-- Chunks, embeddings, topics, topic history and meetings are owned by the engine service, so they have no tables here.
+- Chunks, embeddings, topics, topic history and meetings are owned by `sentinel-backend-service`, so they have no tables here.
 - **Soft delete:** models inherit `SoftDeleteModel` (`orbit_app/softdelete.py`), which adds `deleted_at`. `.delete()` sets it instead of removing the row. `Model.objects` hides deleted rows, `Model.all_objects` includes them, and `.restore()` and `.hard_delete()` are available.
 - Primary keys are named `<table>_id`, for example `message_id`.
 
@@ -251,7 +251,7 @@ The first call that reaches the engine after a quiet period can take up to a min
 
 ## Known limitations
 
-- The engine has no authentication yet, and its Teams, embeddings and vector search backends are still stubs.
+- `sentinel-backend-service` has no authentication yet, and its Teams, embeddings and vector search backends are still stubs.
 - `/process` runs inside the request and can be slow. It should become a Celery task.
 - The Django dev server is used in Docker. It isn't meant for production.
 - Message endpoints are not written yet.

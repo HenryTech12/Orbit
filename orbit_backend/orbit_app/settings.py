@@ -182,11 +182,11 @@ CELERY_RESULT_SERIALIZER = 'json'
 CELERY_TIMEZONE = TIME_ZONE
 
 
-# Orbit engine: external meeting / contradiction / pgvector service.
+# sentinel-backend-service: external meeting / contradiction / pgvector service.
 # Timeout is generous because Render free instances sleep and cold-start slowly.
-ORBIT_ENGINE_URL = env('ORBIT_ENGINE_URL', default='https://orbit-e873.onrender.com')
-ORBIT_ENGINE_API_KEY = env('ORBIT_ENGINE_API_KEY', default='')
-ORBIT_ENGINE_TIMEOUT = env.int('ORBIT_ENGINE_TIMEOUT', default=90)
+SENTINEL_SERVICE_URL = env('SENTINEL_SERVICE_URL', default='https://orbit-e873.onrender.com')
+SENTINEL_SERVICE_API_KEY = env('SENTINEL_SERVICE_API_KEY', default='')
+SENTINEL_SERVICE_TIMEOUT = env.int('SENTINEL_SERVICE_TIMEOUT', default=90)
 
 # API keys accepted by this backend's own API (comma-separated). Empty = no key works.
 ORBIT_API_KEYS = env.list('ORBIT_API_KEYS', default=[])
