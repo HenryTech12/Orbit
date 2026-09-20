@@ -158,6 +158,7 @@ REST_FRAMEWORK = {
         'rest_framework.permissions.IsAuthenticated',
     ],
     'DEFAULT_AUTHENTICATION_CLASSES': [
+        'orbit_app.core.auth.ApiKeyAuthentication',
         'rest_framework.authentication.SessionAuthentication',
     ],
 }
@@ -179,3 +180,13 @@ CELERY_ACCEPT_CONTENT = ['json']
 CELERY_TASK_SERIALIZER = 'json'
 CELERY_RESULT_SERIALIZER = 'json'
 CELERY_TIMEZONE = TIME_ZONE
+
+
+# Orbit engine: external meeting / contradiction / pgvector service.
+# Timeout is generous because Render free instances sleep and cold-start slowly.
+ORBIT_ENGINE_URL = env('ORBIT_ENGINE_URL', default='https://orbit-e873.onrender.com')
+ORBIT_ENGINE_API_KEY = env('ORBIT_ENGINE_API_KEY', default='')
+ORBIT_ENGINE_TIMEOUT = env.int('ORBIT_ENGINE_TIMEOUT', default=90)
+
+# API keys accepted by this backend's own API (comma-separated). Empty = no key works.
+ORBIT_API_KEYS = env.list('ORBIT_API_KEYS', default=[])

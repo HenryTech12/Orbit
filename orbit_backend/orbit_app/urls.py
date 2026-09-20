@@ -20,4 +20,5 @@ from django.urls import include, path
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('api/', include('orbit_app.core.urls')),
+    path('api/engine/', include('orbit_app.engine.urls')),
 ]
