@@ -56,3 +56,34 @@ class SentinelApiTests(SimpleTestCase):
         body = {'source_type': 'sms', 'source_id': '1', 'value_snapshot': 'v', 'authority_level': 'official'}
         response = self.api.post('/api/sentinel/topics/1/history/', body, format='json', HTTP_X_API_KEY='good-key')
         self.assertEqual(response.status_code, 400)
+
+    def test_health_uses_envelope(self):
+        body = self.api.get('/api/health/').json()
+        self.assertEqual(body, {'status': 200, 'message': 'Service is healthy.', 'data': {'healthy': True}})
+
+    def test_auth_errors_use_envelope(self):
+        body = self.api.get('/api/sentinel/topics/').json()
+        self.assertEqual(body['status'], 401)
+        self.assertEqual(body['message'], 'Authentication credentials were not provided.')
+        self.assertIsNone(body['errors'])
+
+    @mock.patch(CLIENT)
+    def test_create_topic_success_envelope(self, client):
+        client.return_value.create_topic.return_value = {'id': 1, 'label': 'x'}
+        response = self.api.post('/api/sentinel/topics/', {'label': 'x'}, format='json', HTTP_X_API_KEY='good-key')
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.json(), {'status': 201, 'message': 'Topic created.', 'data': {'id': 1, 'label': 'x'}})
+
+    @mock.patch(CLIENT)
+    def test_validation_error_envelope(self, client):
+        response = self.api.post('/api/sentinel/topics/', {}, format='json', HTTP_X_API_KEY='good-key')
+        body = response.json()
+        self.assertEqual((response.status_code, body['status'], body['message']), (400, 400, 'Validation failed.'))
+        self.assertIn('label', body['errors'])
+
+    @mock.patch(CLIENT)
+    def test_service_error_envelope(self, client):
+        client.return_value.create_topic.side_effect = SentinelError('dup', status_code=409)
+        body = self.api.post('/api/sentinel/topics/', {'label': 'x'}, format='json', HTTP_X_API_KEY='good-key').json()
+        self.assertEqual((body['status'], body['message']), (409, 'dup'))
+

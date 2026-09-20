@@ -98,7 +98,7 @@ Check it worked:
 
 ```
 docker compose ps
-curl http://localhost:8000/api/health/          # {"status":"ok"}
+curl http://localhost:8000/api/health/          # {"status":200,"message":"Service is healthy.","data":{"healthy":true}}
 ```
 
 ### 3. Create an admin user (optional)
@@ -206,12 +206,33 @@ curl -X POST http://localhost:8000/api/sentinel/topics/ \
   -d '{"label": "Launch date"}'
 ```
 
-**Response codes**
+**Response format**
+
+Every response is JSON in the same envelope. The `status` field repeats the HTTP status code.
+
+Success:
+```json
+{
+  "status": 201,
+  "message": "Topic created.",
+  "data": { "id": 1, "label": "Launch date" }
+}
+```
+
+Error:
+```json
+{
+  "status": 400,
+  "message": "Validation failed.",
+  "errors": { "label": ["This field is required."] }
+}
+```
+`errors` holds the field-level details for validation errors, and is `null` for other errors.
 
 | Code | Meaning |
 |---|---|
-| 200 / 201 | Success |
-| 400 | The body failed validation (the message names the field) |
+| 200 / 201 | Success (`data` holds the result) |
+| 400 | The body failed validation (`errors` names the fields) |
 | 401 | Key missing or wrong |
 | 409 | Duplicate topic (passed through from `sentinel-backend-service`) |
 | 502 | `sentinel-backend-service` was unreachable or failed |
@@ -222,7 +243,7 @@ The first call that reaches `sentinel-backend-service` after a quiet period can 
 
 - Every route except `/api/health/` requires an API key. The check is in `orbit_app/core/auth.py`.
 - Valid keys are listed in `ORBIT_API_KEYS`. With no keys configured, every request is rejected.
-- A missing key returns `Authentication credentials were not provided.`. A wrong key returns `Invalid API key.`.
+- A missing key returns a 401 with the message `Authentication credentials were not provided.`. A wrong key returns a 401 with `Invalid API key.`.
 - `sentinel-backend-service` itself has no authentication yet, so keep its URL out of client apps. When it gets a key check, set `SENTINEL_SERVICE_API_KEY` and the client sends it as a Bearer token.
 
 ## Data model
