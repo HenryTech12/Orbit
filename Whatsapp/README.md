@@ -37,6 +37,9 @@ The adapter is responsible for:
 - Protecting against duplicate message events
 - Retrying transient processing and sending failures
 - Supporting actual quoted WhatsApp replies
+- Running as a persistent Dockerized service
+- Persisting WhatsApp authentication across container recreation
+- Mounting local WhatsApp knowledge into the container as read-only data
 
 The adapter keeps WhatsApp-specific transport concerns separate from Sentinel's knowledge and reasoning components.
 
@@ -84,6 +87,12 @@ The adapter keeps WhatsApp-specific transport concerns separate from Sentinel's 
 - [x] Graceful shutdown
 - [x] Unsupported-media guard
 - [x] TypeScript build
+- [x] Docker image build
+- [x] Docker Compose deployment
+- [x] Persistent Docker authentication volume
+- [x] Read-only local WhatsApp history bind mount
+- [x] Detached long-running Docker operation
+- [x] Docker restart policy
 
 ### Current local knowledge flow
 
@@ -107,6 +116,30 @@ WhatsApp
 
 The current exported team conversation contains **188 WhatsApp messages** and is used as the temporary local knowledge source while the backend is being finalized.
 
+### Current Docker flow
+
+The local knowledge file is intentionally kept outside the Docker image and mounted at runtime.
+
+```text
+Host
+│
+├── .env
+│
+├── data/
+│   └── chat-orbit-team.txt
+│
+└── Docker Compose
+        │
+        ▼
+sentinel-whatsapp
+        │
+        ├── /app/auth
+        │      └── Docker named volume
+        │
+        └── /app/data
+               └── read-only bind mount
+```
+
 ### Not yet implemented
 
 - [ ] Real Sentinel backend `/copilot/ask` end-to-end integration testing
@@ -118,22 +151,29 @@ The current exported team conversation contains **188 WhatsApp messages** and is
 - [ ] Robust conflict detection
 - [ ] Dynamic trust classification
 - [ ] Production deployment configuration
+- [ ] Production monitoring
+- [ ] Production secret management
+- [ ] Multimodal document understanding
 
 ---
 
 ## Tech Stack
 
 - **TypeScript**
-- **Node.js**
+- **Node.js 24**
 - **Baileys**
 - **Google Gemini API / `@google/genai`**
 - **dotenv**
 - **tsx**
 - **qrcode-terminal**
+- **Docker**
+- **Docker Compose**
 
 Baileys provides the WebSocket-based interface used to communicate with WhatsApp Web.
 
 Gemini is used by the temporary local Copilot mode to generate grounded answers from retrieved WhatsApp evidence.
+
+Docker Compose is used to run the adapter as a persistent service with named-volume and bind-mount storage.
 
 ---
 
@@ -180,13 +220,22 @@ Whatsapp/
 │   │
 │   └── index.ts
 │
+├── data/
+│   └── chat-orbit-team.txt
+│
+├── .dockerignore
+├── .env
 ├── .env.example
 ├── .gitignore
+├── compose.yaml
+├── Dockerfile
 ├── package.json
 ├── package-lock.json
 ├── tsconfig.json
 └── README.md
 ```
+
+> `data/` contains private WhatsApp history and must remain excluded from Git. It is mounted into Docker at runtime rather than copied into the image.
 
 ---
 
@@ -602,13 +651,25 @@ Baileys supports quoted messages through the `quoted` send option.
 
 ## Authentication
 
-Baileys authentication state is stored locally in:
+Baileys authentication state is stored locally during non-Docker development in:
 
 ```text
 auth_info/
 ```
 
 This directory is intentionally excluded from Git.
+
+In Docker, authentication is stored in the persistent named volume:
+
+```text
+whatsapp_auth
+```
+
+mounted at:
+
+```text
+/app/auth
+```
 
 Never commit WhatsApp authentication credentials.
 
@@ -619,6 +680,7 @@ node_modules/
 dist/
 .env
 auth_info/
+data/
 ```
 
 ---
@@ -673,7 +735,9 @@ After successful authentication:
 WhatsApp connected.
 ```
 
-Authentication is persisted in `auth_info/`, so subsequent launches can reuse the session.
+Authentication is persisted in `auth_info/` during local development.
+
+When running through Docker, authentication is instead persisted in the `whatsapp_auth` named volume.
 
 ---
 
@@ -745,6 +809,550 @@ Build the adapter interface and focus on the core product.
 
 ---
 
+# Docker Deployment
+
+The adapter is Dockerized so it can run as a long-running service without keeping a terminal session attached.
+
+The Docker deployment separates:
+
+1. Application code inside the image
+2. WhatsApp authentication in a persistent named volume
+3. Local WhatsApp history in a host bind mount
+4. Environment configuration in `.env`
+
+The resulting architecture is:
+
+```text
+Host
+│
+├── .env
+│
+├── data/
+│   └── chat-orbit-team.txt
+│
+└── Docker Compose
+        │
+        ▼
+┌──────────────────────────────┐
+│ sentinel-whatsapp            │
+│                              │
+│ Node.js 24                   │
+│ Baileys                      │
+│ Local Copilot                │
+│ Compiled TypeScript          │
+│                              │
+│ /app/auth  ← named volume   │
+│ /app/data  ← read-only bind │
+└──────────────────────────────┘
+```
+
+Docker Compose supports named volumes and bind mounts as service volume types, and the Compose `read_only` mount option can make a mounted path read-only.
+
+---
+
+## Docker Prerequisites
+
+Install:
+
+- Docker Desktop
+- Docker Compose
+
+Verify:
+
+```powershell
+docker --version
+```
+
+and:
+
+```powershell
+docker compose version
+```
+
+---
+
+## Dockerfile
+
+The adapter uses a multi-stage Docker build.
+
+### Build stage
+
+```text
+Node.js 24 Alpine
+        ↓
+npm ci
+        ↓
+TypeScript source
+        ↓
+npm run build
+```
+
+### Runtime stage
+
+```text
+Node.js 24 Alpine
+        ↓
+Production dependencies
+        ↓
+Compiled dist/
+        ↓
+node dist/index.js
+```
+
+Current `Dockerfile`:
+
+```dockerfile
+# syntax=docker/dockerfile:1
+
+FROM node:24-alpine AS builder
+
+WORKDIR /app
+
+# Install dependencies first for better Docker layer caching
+COPY package.json package-lock.json ./
+RUN npm ci
+
+# Copy source code
+COPY tsconfig.json ./
+COPY src ./src
+
+# Build TypeScript
+RUN npm run build
+
+
+FROM node:24-alpine AS runner
+
+WORKDIR /app
+
+ENV NODE_ENV=production
+
+# Install only production dependencies
+COPY package.json package-lock.json ./
+RUN npm ci --omit=dev
+
+# Copy compiled application
+COPY --from=builder /app/dist ./dist
+
+# The adapter is a long-running process
+CMD ["node", "dist/index.js"]
+```
+
+---
+
+## `.dockerignore`
+
+The current `.dockerignore` is:
+
+```text
+node_modules
+dist
+.git
+.gitignore
+
+.env
+.env.*
+!.env.example
+
+data/
+*.log
+
+.vscode/
+.idea/
+
+README.Docker.md
+```
+
+The WhatsApp history is intentionally excluded from the image because it is mounted at runtime.
+
+This prevents private local WhatsApp data from being baked into the Docker image.
+
+---
+
+## Docker Compose
+
+The current `compose.yaml` is:
+
+```yaml
+services:
+  whatsapp:
+    build:
+      context: .
+      dockerfile: Dockerfile
+
+    container_name: sentinel-whatsapp
+
+    env_file:
+      - .env
+
+    volumes:
+      - whatsapp_auth:/app/auth
+      - type: bind
+        source: ./data
+        target: /app/data
+        read_only: true
+
+    restart: unless-stopped
+
+volumes:
+  whatsapp_auth:
+```
+
+### Named authentication volume
+
+The following:
+
+```yaml
+- whatsapp_auth:/app/auth
+```
+
+stores WhatsApp authentication outside the container's writable layer.
+
+Named volumes are persistent data stores managed by the container engine.
+
+### Read-only knowledge bind mount
+
+The following:
+
+```yaml
+- type: bind
+  source: ./data
+  target: /app/data
+  read_only: true
+```
+
+maps the host's `./data` directory into `/app/data` inside the container.
+
+The application can read the WhatsApp history but cannot modify the mounted host data through this mount.
+
+Docker supports read-only bind mounts for exactly this type of access pattern.
+
+### Restart policy
+
+The service uses:
+
+```yaml
+restart: unless-stopped
+```
+
+This allows Docker to restart the container after termination while respecting an intentional manual stop.
+
+---
+
+## Docker Environment
+
+Docker loads environment variables from:
+
+```yaml
+env_file:
+  - .env
+```
+
+The `.env` file should contain:
+
+```env
+WHATSAPP_USE_MOCK=true
+SENTINEL_API_BASE_URL=http://localhost:8000/api/v1
+GEMINI_API_KEY=your_gemini_api_key
+```
+
+Never commit `.env`.
+
+Do not expose API keys through:
+
+```powershell
+docker compose config
+```
+
+or screenshots/logs.
+
+Use safer configuration checks when necessary and never publish secret values.
+
+---
+
+## Docker Build
+
+Build the image:
+
+```powershell
+docker build --no-cache --progress=plain -t sentinel-whatsapp:test .
+```
+
+Or build through Compose:
+
+```powershell
+docker compose build
+```
+
+---
+
+## Start Docker Service
+
+Start the adapter in detached mode:
+
+```powershell
+docker compose up -d
+```
+
+Check the service:
+
+```powershell
+docker compose ps
+```
+
+Expected status:
+
+```text
+NAME                IMAGE               COMMAND              SERVICE    STATUS
+sentinel-whatsapp   ...                 ...                  whatsapp   Up
+```
+
+---
+
+## View Docker Logs
+
+Follow logs:
+
+```powershell
+docker compose logs -f whatsapp
+```
+
+View the latest logs:
+
+```powershell
+docker compose logs --tail=50 whatsapp
+```
+
+---
+
+## Docker QR Authentication
+
+On the first Docker startup, the adapter may display a WhatsApp QR code.
+
+Scan it using:
+
+```text
+WhatsApp
+→ Settings
+→ Linked Devices
+→ Link a Device
+```
+
+After successful pairing, the authentication state is stored in:
+
+```text
+whatsapp_auth
+```
+
+and mounted inside the container at:
+
+```text
+/app/auth
+```
+
+The authentication state is therefore not dependent on the lifecycle of the application container.
+
+---
+
+## Verify Local Data Inside Docker
+
+Run:
+
+```powershell
+docker compose exec whatsapp ls -l /app/data
+```
+
+Expected file:
+
+```text
+chat-orbit-team.txt
+```
+
+This confirms that:
+
+```text
+Host ./data
+      ↓
+Container /app/data
+```
+
+is correctly mounted.
+
+---
+
+## Docker End-to-End Test
+
+After starting the container and pairing WhatsApp, send:
+
+```text
+@sentinel What did we plan for September 22?
+```
+
+Expected processing:
+
+```text
+WhatsApp
+    ↓
+Baileys
+    ↓
+Message Normalization
+    ↓
+Message Ingestion
+    ↓
+Mention Detection
+    ↓
+Local Retrieval
+    ↓
+Gemini
+    ↓
+Grounded Answer
+    ↓
+Sources
+    ↓
+Quoted WhatsApp Reply
+```
+
+The local knowledge store should load:
+
+```text
+188 WhatsApp messages
+```
+
+and Gemini should generate an answer based on retrieved evidence.
+
+---
+
+## Docker Restart Test
+
+Restart the service:
+
+```powershell
+docker compose restart whatsapp
+```
+
+Then check:
+
+```powershell
+docker compose logs --tail=30 whatsapp
+```
+
+The `whatsapp_auth` named volume should preserve the WhatsApp authentication state across a normal container restart.
+
+Docker's `restart` command restarts the service container, while changes to the Compose configuration are not applied merely by running `docker compose restart`; use `docker compose up -d` when configuration changes need to be recreated.
+
+---
+
+## Docker Container Recreation Test
+
+To recreate the container while preserving the named authentication volume:
+
+```powershell
+docker compose down
+```
+
+Then:
+
+```powershell
+docker compose up -d
+```
+
+The `whatsapp_auth` named volume is not removed by a normal `docker compose down`.
+
+Docker's documentation specifies that named volumes are removed by `docker compose down` only when the `-v` / `--volumes` option is used.
+
+---
+
+## Important Docker Volume Warning
+
+Do **not** use:
+
+```powershell
+docker compose down -v
+```
+
+unless you intentionally want to delete the persistent authentication volume.
+
+The `-v` option removes named volumes declared by the Compose project.
+
+For this adapter, removing the volume can remove the WhatsApp authentication state and require QR pairing again.
+
+---
+
+## Docker Data Architecture
+
+The adapter uses two different storage mechanisms for two different purposes.
+
+### WhatsApp authentication
+
+```text
+Docker named volume
+        ↓
+whatsapp_auth
+        ↓
+/app/auth
+```
+
+Purpose:
+
+- Persistent authentication
+- Container recreation persistence
+- No authentication credentials in the image
+
+### WhatsApp knowledge export
+
+```text
+Host directory
+      ↓
+./data
+      ↓
+read-only bind mount
+      ↓
+/app/data
+```
+
+Purpose:
+
+- Keep private WhatsApp export outside the image
+- Update local knowledge without rebuilding the image
+- Prevent the container from modifying the source export
+
+This separation follows Docker's distinction between persistent named volumes and host bind mounts.
+
+---
+
+## Docker Files
+
+The Docker deployment consists of:
+
+```text
+Dockerfile
+.dockerignore
+compose.yaml
+.env
+data/
+```
+
+### `Dockerfile`
+
+Builds the production Node.js runtime image.
+
+### `.dockerignore`
+
+Prevents unnecessary and sensitive files from entering the Docker build context.
+
+### `compose.yaml`
+
+Defines the long-running WhatsApp service, environment configuration, persistent authentication volume, read-only data mount, and restart policy.
+
+### `.env`
+
+Stores local runtime configuration and secrets.
+
+### `data/`
+
+Contains the local WhatsApp export and remains outside the Docker image.
+
+---
+
 ## Security Considerations
 
 The adapter handles potentially sensitive WhatsApp conversations.
@@ -753,6 +1361,7 @@ Important rules:
 
 - Never commit `.env`
 - Never commit `auth_info/`
+- Never commit `data/`
 - Never expose WhatsApp authentication credentials
 - Never expose `GEMINI_API_KEY`
 - Avoid logging message contents in production
@@ -761,6 +1370,10 @@ Important rules:
 - Use persistent idempotency before production deployment
 - Protect exported WhatsApp history because it may contain private conversations
 - Do not deploy exported team data to an uncontrolled environment
+- Do not include secrets in Docker images
+- Do not publish secret-bearing Docker configuration output
+
+Docker Compose documentation also notes that file-reference fields such as `env_file` can read host files and their contents can potentially appear during configuration loading, so configuration inspection should be performed carefully when secrets are present.
 
 ---
 
@@ -824,6 +1437,12 @@ The WhatsApp adapter should remain focused on:
 
 Complex knowledge functionality should not permanently accumulate inside the WhatsApp adapter.
 
+### 7. Container separation
+
+Docker should package the application runtime without embedding private conversation exports or runtime secrets into the image.
+
+Authentication and local knowledge should remain external to the application image.
+
 ---
 
 ## Current Development Roadmap
@@ -852,7 +1471,19 @@ Complex knowledge functionality should not permanently accumulate inside the Wha
 - [x] Local Copilot testing
 - [x] End-to-end WhatsApp local knowledge flow
 
-### Phase 3 — Backend integration
+### Phase 3 — Docker deployment
+
+- [x] Create production Dockerfile
+- [x] Multi-stage Docker build
+- [x] Create `.dockerignore`
+- [x] Create Docker Compose configuration
+- [x] Persistent WhatsApp authentication volume
+- [x] Read-only local knowledge bind mount
+- [x] Detached service operation
+- [x] Automatic restart policy
+- [x] Docker end-to-end local knowledge test
+
+### Phase 4 — Backend integration
 
 - [ ] Connect real `/copilot/ask`
 - [ ] Connect real ingestion endpoint
@@ -861,7 +1492,7 @@ Complex knowledge functionality should not permanently accumulate inside the Wha
 - [ ] Verify retry behavior against real backend failures
 - [ ] Verify conversation/group scoping
 
-### Phase 4 — Reliability and trust
+### Phase 5 — Reliability and trust
 
 - [ ] Dynamic trust classification
 - [ ] Conflict detection
@@ -873,7 +1504,7 @@ Complex knowledge functionality should not permanently accumulate inside the Wha
 - [ ] Wrong-source testing
 - [ ] Missing-information testing
 
-### Phase 5 — Judge/demo experience
+### Phase 6 — Judge/demo experience
 
 - [ ] Concise WhatsApp responses
 - [ ] Trust indicators
@@ -883,6 +1514,196 @@ Complex knowledge functionality should not permanently accumulate inside the Wha
 - [ ] Meeting intelligence
 - [ ] End-to-end live demo
 - [ ] Production deployment
+
+---
+
+## Docker Commands Reference
+
+### Build
+
+```powershell
+docker compose build
+```
+
+### Build without cache
+
+```powershell
+docker build --no-cache --progress=plain -t sentinel-whatsapp:test .
+```
+
+### Start
+
+```powershell
+docker compose up -d
+```
+
+### Start and rebuild
+
+```powershell
+docker compose up -d --build
+```
+
+### Check status
+
+```powershell
+docker compose ps
+```
+
+### Follow logs
+
+```powershell
+docker compose logs -f whatsapp
+```
+
+### View recent logs
+
+```powershell
+docker compose logs --tail=50 whatsapp
+```
+
+### Restart
+
+```powershell
+docker compose restart whatsapp
+```
+
+### Stop and remove containers
+
+```powershell
+docker compose down
+```
+
+### Stop and remove containers plus named volumes
+
+```powershell
+docker compose down -v
+```
+
+> Use `-v` only when intentionally deleting persistent Docker volumes.
+
+### Inspect mounted data
+
+```powershell
+docker compose exec whatsapp ls -l /app/data
+```
+
+### Open a shell inside the container
+
+```powershell
+docker compose exec whatsapp sh
+```
+
+---
+
+## Current Deployment Model
+
+```text
+Developer / Server
+       │
+       ▼
+Docker Compose
+       │
+       ▼
+sentinel-whatsapp
+       │
+       ├── /app/auth
+       │       └── whatsapp_auth
+       │           named Docker volume
+       │
+       └── /app/data
+               └── ./data
+                   read-only bind mount
+```
+
+This provides a practical deployment model where:
+
+- The application runs inside Docker.
+- WhatsApp authentication persists outside the container filesystem.
+- Local WhatsApp knowledge remains on the host.
+- The knowledge directory is read-only inside the container.
+- Docker can automatically restart the adapter.
+- The adapter can run detached from an interactive terminal.
+- The backend can be connected later without changing the WhatsApp-facing architecture.
+
+---
+
+## Current End-to-End Architecture
+
+```text
+                         WhatsApp
+                            │
+                            ▼
+                    Baileys Gateway
+                            │
+                            ▼
+                 Message Normalization
+                            │
+                            ▼
+                  Message Ingestion
+                            │
+                            ▼
+                   Mention Detection
+                            │
+                    ┌───────┴────────┐
+                    │                │
+                    ▼                ▼
+             Local Copilot     Sentinel Backend
+                    │                │
+                    ▼                ▼
+             Local Retrieval       RAG/API
+                    │                │
+                    └───────┬────────┘
+                            ▼
+                    Grounded Response
+                            │
+                            ▼
+                    Trust + Sources
+                            │
+                            ▼
+                    WhatsApp Reply
+```
+
+---
+
+## Current Project Status
+
+The Sentinel WhatsApp adapter is currently capable of:
+
+```text
+Receive WhatsApp message
+        ↓
+Detect @sentinel
+        ↓
+Normalize message
+        ↓
+Ingest message
+        ↓
+Retrieve local evidence
+        ↓
+Ask Gemini using retrieved evidence
+        ↓
+Generate grounded response
+        ↓
+Attach sources
+        ↓
+Send actual quoted WhatsApp reply
+```
+
+The adapter is also Dockerized with:
+
+```text
+Persistent authentication
++
+Read-only local knowledge
++
+Automatic restart
++
+Detached operation
+```
+
+The local development path is functional while the Sentinel backend is being finalized.
+
+The next major integration point is connecting the adapter to the Sentinel backend once the backend API is ready.
 
 ---
 
