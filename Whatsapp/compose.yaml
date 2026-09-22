@@ -1,0 +1,22 @@
+services:
+  whatsapp:
+    build:
+      context: .
+      dockerfile: Dockerfile
+
+    container_name: sentinel-whatsapp
+
+    env_file:
+      - .env
+
+    volumes:
+      - whatsapp_auth:/app/auth
+      - type: bind
+        source: ./data
+        target: /app/data
+        read_only: true
+
+    restart: unless-stopped
+
+volumes:
+  whatsapp_auth:
