@@ -1,0 +1,109 @@
+services:
+  # 1. PostgreSQL Database
+  db:
+    image: postgres:16-alpine
+    container_name: orbit-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-orbit_db}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - orbit-network
+
+  # 2. Redis Cache & Celery Broker
+  redis:
+    image: redis:7-alpine
+    container_name: orbit-redis
+    restart: unless-stopped
+    ports:
+      - "${REDIS_PORT:-6380}:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - orbit-network
+
+  # 3. Django Backend API
+  backend:
+    build:
+      context: ./orbit_backend
+      dockerfile: Dockerfile
+    container_name: orbit-backend
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-orbit_db}
+      POSTGRES_DB: ${POSTGRES_DB:-orbit_db}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_HOST: db
+      POSTGRES_PORT: 5432
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/0
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./orbit_backend:/app
+    networks:
+      - orbit-network
+
+  # 4. WhatsApp Service
+  whatsapp:
+    build:
+      context: ./Whatsapp
+      dockerfile: Dockerfile
+    container_name: orbit-whatsapp
+    restart: unless-stopped
+    environment:
+      - WHATSAPP_USE_MOCK=${WHATSAPP_USE_MOCK:-true}
+      - SENTINEL_API_BASE_URL=http://backend:8000/api/v1
+      - GEMINI_API_KEY=${GEMINI_API_KEY:-mock_key_for_dev}
+    volumes:
+      - ./Whatsapp/auth_info:/app/auth_info
+      - ./Whatsapp/data:/app/data
+    depends_on:
+      - backend
+    networks:
+      - orbit-network
+
+  # 5. Frontend Web UI
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: orbit-frontend
+    restart: unless-stopped
+    ports:
+      - "5173:80"
+    depends_on:
+      - backend
+    networks:
+      - orbit-network
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+
+networks:
+  orbit-network:
+    driver: bridge
