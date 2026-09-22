@@ -1,4 +1,4 @@
-Django==6.1.1
+Django==6.0.8
 djangorestframework==3.18.1
 psycopg2-binary==2.9.13
 django-environ==0.14.0
@@ -7,3 +7,4 @@ celery==5.6.3
 redis==8.1.0
 django-celery-beat==2.9.0
 django-celery-results==2.6.0
+requests==2.34.2

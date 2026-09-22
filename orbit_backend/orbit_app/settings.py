@@ -154,10 +154,12 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 # https://www.django-rest-framework.org/api-guide/settings/
 
 REST_FRAMEWORK = {
+    'EXCEPTION_HANDLER': 'orbit_app.core.exception_handler.api_exception_handler',
     'DEFAULT_PERMISSION_CLASSES': [
         'rest_framework.permissions.IsAuthenticated',
     ],
     'DEFAULT_AUTHENTICATION_CLASSES': [
+        'orbit_app.core.auth.ApiKeyAuthentication',
         'rest_framework.authentication.SessionAuthentication',
     ],
 }
@@ -179,3 +181,13 @@ CELERY_ACCEPT_CONTENT = ['json']
 CELERY_TASK_SERIALIZER = 'json'
 CELERY_RESULT_SERIALIZER = 'json'
 CELERY_TIMEZONE = TIME_ZONE
+
+
+# sentinel-backend-service: external meeting / contradiction / pgvector service.
+# Timeout is generous because Render free instances sleep and cold-start slowly.
+SENTINEL_SERVICE_URL = env('SENTINEL_SERVICE_URL', default='https://orbit-e873.onrender.com')
+SENTINEL_SERVICE_API_KEY = env('SENTINEL_SERVICE_API_KEY', default='')
+SENTINEL_SERVICE_TIMEOUT = env.int('SENTINEL_SERVICE_TIMEOUT', default=90)
+
+# API keys accepted by this backend's own API (comma-separated). Empty = no key works.
+ORBIT_API_KEYS = env.list('ORBIT_API_KEYS', default=[])
