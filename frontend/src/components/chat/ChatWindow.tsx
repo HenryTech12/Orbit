@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { sentinelApi } from "@/services/api";
 import type { CopilotAskResponse } from "@/types/sentinel";
 import { ChatMessage, type ChatMessageItem } from "./ChatMessage";
@@ -12,7 +12,8 @@ const INITIAL_MESSAGE: ChatMessageItem = {
   id: "initial",
   sender: "assistant",
   response: {
-    answer: "Hello! I am Sentinel, your UniPods Knowledge Copilot. Ask me about announcements, deadlines, meetings, or decisions across our channels.",
+    answer:
+      "Hello! I am Sentinel, your UniPods Knowledge Copilot. Ask me about announcements, deadlines, meetings, or decisions across our channels.",
     status: "CONFIRMED",
     citations: [],
   },
@@ -22,7 +23,10 @@ const INITIAL_MESSAGE: ChatMessageItem = {
 export const ChatWindow: React.FC = () => {
   const [input, setInput] = useState("");
   const [selectedSourceId, setSelectedSourceId] = useState<string | null>(null);
-  const [messages, setMessages] = useState<ChatMessageItem[]>([INITIAL_MESSAGE]);
+  const [messages, setMessages] = useState<ChatMessageItem[]>([
+    INITIAL_MESSAGE,
+  ]);
+  const queryClient = useQueryClient();
 
   // Fetch persisted history from backend
   const { data: history, isLoading: isHistoryLoading } = useQuery({
@@ -71,6 +75,9 @@ export const ChatWindow: React.FC = () => {
     mutationFn: ({ question }: { question: string; shouldSpeak: boolean }) =>
       sentinelApi.ask({ question, sessionId: "default-session" }),
     onSuccess: (data: CopilotAskResponse, variables) => {
+      queryClient.invalidateQueries({
+        queryKey: ["sentinelChatHistory", "default-session"],
+      });
       const assistantMessage: ChatMessageItem = {
         id: `asst-${Date.now()}`,
         sender: "assistant",

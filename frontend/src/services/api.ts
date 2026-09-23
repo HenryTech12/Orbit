@@ -6,8 +6,7 @@ import type {
   CatchUpAnnouncement,
   CatchUpMeeting,
   SourceDetail,
-  UploadSourceResponse,
-  TrustStatus,
+  UploadSourceResponse
 } from "@/types/sentinel";
 import { MOCK_ASK_RESPONSE, MOCK_CATCHUP_RESPONSE } from "./mockData";
 
@@ -60,30 +59,21 @@ export interface VectorSearchHit {
   };
 }
 
-const CHAT_STORAGE_KEY = "sentinel_chat_history";
 
 export const sentinelApi = {
-  getHistory(_sessionId: string = "default-session") {
+  async getHistory(sessionId: string = "default-session") {
     try {
-      const saved = localStorage.getItem(CHAT_STORAGE_KEY);
-      return saved ? JSON.parse(saved) : [];
-    } catch {
+      const res = await fetch(
+        `${API_BASE_URL}/sentinel/chat/messages/?session_id=${encodeURIComponent(sessionId)}`,
+        { headers: getHeaders() }
+      );
+      if (!res.ok) return [];
+      const json = await res.json();
+      return Array.isArray(json.data) ? json.data : [];
+    } catch (err) {
+      console.error("Failed to load chat history from backend", err);
       return [];
     }
-  },
-
-  saveMessage(messageItem: any) {
-    try {
-      const current = this.getHistory();
-      const updated = [...current, messageItem];
-      localStorage.setItem(CHAT_STORAGE_KEY, JSON.stringify(updated));
-    } catch (err) {
-      console.error("Failed to save message to local storage", err);
-    }
-  },
-
-  clearHistory() {
-    localStorage.removeItem(CHAT_STORAGE_KEY);
   },
 
   async ask(
@@ -94,104 +84,21 @@ export const sentinelApi = {
       return MOCK_ASK_RESPONSE;
     }
 
-    try {
-      const res = await fetch(`${API_BASE_URL}/sentinel/vectors/search/`, {
-        method: "POST",
-        headers: getHeaders({ "Content-Type": "application/json" }),
-        body: JSON.stringify({
-          query: payload.question,
-          top_k: 5,
-        }),
-      });
+    const res = await fetch(`${API_BASE_URL}/sentinel/chat/messages/`, {
+      method: "POST",
+      headers: getHeaders({ "Content-Type": "application/json" }),
+      body: JSON.stringify({
+        question: payload.question,
+        session_id: payload.sessionId || "default-session",
+      }),
+    });
 
-      if (!res.ok) {
-        throw new Error(`Sentinel vector query failed with HTTP ${res.status}`);
-      }
-
-      const json = await res.json();
-      const hits = Array.isArray(json.data)
-        ? json.data
-        : json.data?.results || [];
-
-      // Extract citations
-      const citations = hits.slice(0, 3).map((hit: any, idx: number) => {
-        const rawSnippet = hit.text || hit.content || hit.snippet || "";
-        const cleanSnippet = rawSnippet.replace(/--- Page \d+ ---/g, "").trim();
-        return {
-          citation_id: hit.id || `src_${idx}`,
-          source_id: hit.source_id || `doc_${idx}`,
-          title: hit.title || `Knowledge Source #${idx + 1}`,
-          source_type: hit.source_type || "meeting_transcript",
-          author: hit.author || "Sentinel Knowledge Base",
-          date: hit.timestamp || "Recent",
-          snippet:
-            cleanSnippet.length > 200
-              ? cleanSnippet.slice(0, 200) + "..."
-              : cleanSnippet,
-        };
-      });
-
-      // Grounding evaluation heuristic
-      const stopWords = new Set([
-        "what",
-        "when",
-        "where",
-        "who",
-        "the",
-        "for",
-        "are",
-        "is",
-        "how",
-        "many",
-        "does",
-        "with",
-      ]);
-      const queryWords =
-        payload.question
-          .toLowerCase()
-          .match(/[a-zA-Z]{3,}/g)
-          ?.filter((w) => !stopWords.has(w)) || [];
-
-      let matchedChunk: string | null = null;
-      for (const hit of hits) {
-        const chunk = (hit.text || hit.content || "").toLowerCase();
-        if (queryWords.some((w) => chunk.includes(w))) {
-          matchedChunk = hit.text || hit.content;
-          break;
-        }
-      }
-      let answer = "";
-      let status: TrustStatus = "UNKNOWN";
-      let status_reason = "";
-
-      if (hits.length > 0 && matchedChunk) {
-        answer = matchedChunk
-          .replace(/--- Page \d+ ---/g, "")
-          .replace(/\s+/g, " ")
-          .trim();
-        status = "CONFIRMED";
-        status_reason = `Grounding verified against ${hits.length} indexed vector chunks.`;
-      } else if (hits.length > 0 && !matchedChunk) {
-        answer = `The knowledge base contains indexed documents, but none specifically state the answer to: "${payload.question}".`;
-        status = "DISPUTED";
-        status_reason =
-          "Retrieved chunks do not contain specific details for this query.";
-      } else {
-        answer = `No relevant data found for "${payload.question}". Please upload the source document first.`;
-        status = "UNKNOWN";
-        status_reason = "No matching vector records found in pgvector.";
-      }
-
-      return {
-        answer,
-        status,
-        status_reason,
-        citations,
-      };
-    } catch (err) {
-      console.error("Copilot query error:", err);
-      throw err;
+    if (!res.ok) {
+      throw new Error(`Sentinel backend error: HTTP ${res.status}`);
     }
+
+    const json = await res.json();
+    return json.data;
   },
 
   async catchUp(payload: CatchUpRequest): Promise<CatchUpResponse> {
