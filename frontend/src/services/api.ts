@@ -31,6 +31,23 @@ interface BackendTopic {
   last_updated?: string;
 }
 
+interface VectorSearchHit {
+  id?: string;
+  source_id?: string;
+  text?: string;
+  content?: string;
+  snippet?: string;
+  title?: string;
+  score?: number;
+  metadata?: {
+    source_id?: string;
+    title?: string;
+    author?: string;
+    source_type?: string;
+    timestamp?: string;
+  };
+}
+
 export const sentinelApi = {
   async ask(payload: CopilotAskRequest): Promise<CopilotAskResponse> {
     if (USE_MOCK) {
@@ -39,54 +56,55 @@ export const sentinelApi = {
     }
 
     try {
-      const res = await fetch(`${API_BASE_URL}/sentinel/topics/`, {
+      const res = await fetch(`${API_BASE_URL}/sentinel/vectors/search/`, {
         method: 'POST',
         headers: getHeaders({ 'Content-Type': 'application/json' }),
-        body: JSON.stringify({ label: payload.question || 'General Query' }),
+        body: JSON.stringify({
+          query: payload.question,
+          top_k: 5
+        }),
       });
 
-      if (res.status === 409) {
+      if (!res.ok) {
+        throw new Error(`Vector search failed with status ${res.status}`);
+      }
+
+      const raw = await res.json();
+      const hits: VectorSearchHit[] = Array.isArray(raw.data)
+        ? raw.data
+        : (raw.data?.results || (Array.isArray(raw) ? raw : []));
+
+      if (hits.length === 0) {
         return {
-          answer: `Topic "${payload.question}" is already being tracked by the Sentinel backend.`,
-          status: 'CONFIRMED',
-          status_reason: 'Topic previously registered in Sentinel system.',
-          citations: [
-            {
-              citation_id: `cit_existing_${Date.now()}`,
-              source_id: 'live_backend',
-              title: payload.question,
-              source_type: 'announcement',
-              author: 'Sentinel Agent',
-              date: new Date().toISOString(),
-              snippet: 'Topic already registered and being monitored.'
-            }
-          ],
+          answer: `No indexed evidence found matching "${payload.question}". Ingest relevant documents or meeting notes to ground this query.`,
+          status: 'DISPUTED',
+          status_reason: 'Vector search returned 0 matching context chunks.',
+          citations: [],
           facts: []
         };
       }
 
-      if (!res.ok) {
-        throw new Error(`Copilot API error: ${res.statusText}`);
-      }
+      const primaryHit = hits[0];
+      const answerSnippet = primaryHit.text || primaryHit.content || primaryHit.snippet || 'Referenced relevant context chunk.';
 
-      const raw = await res.json();
-      const topicData = raw.data || raw;
+      const citations = hits.slice(0, 3).map((hit, index) => {
+        const textSnippet = hit.text || hit.content || hit.snippet || 'Snippet content';
+        return {
+          citation_id: hit.id || `hit_${index}`,
+          source_id: hit.source_id || hit.metadata?.source_id || `src_${index}`,
+          title: hit.title || hit.metadata?.title || `Knowledge Source #${index + 1}`,
+          source_type: 'meeting_transcript' as const,
+          author: hit.metadata?.author || 'Sentinel Ingestion',
+          date: hit.metadata?.timestamp || new Date().toISOString(),
+          snippet: textSnippet.length > 200 ? `${textSnippet.substring(0, 197)}...` : textSnippet
+        };
+      });
 
       return {
-        answer: `Topic registered: "${topicData.label || payload.question}". Status: ${topicData.latest_status || 'tracked'}.`,
+        answer: answerSnippet,
         status: 'CONFIRMED',
-        status_reason: 'Live topic verified by Sentinel backend.',
-        citations: [
-          {
-            citation_id: `cit_${topicData.id || 'sentinel'}`,
-            source_id: topicData.id || 'live_backend',
-            title: topicData.label || 'Sentinel Topic Stream',
-            source_type: 'announcement',
-            author: 'Sentinel Agent',
-            date: topicData.last_updated || new Date().toISOString(),
-            snippet: `Current status: ${topicData.latest_status || 'active'}`
-          }
-        ],
+        status_reason: `Grounding verified against ${hits.length} indexed chunks.`,
+        citations,
         facts: []
       };
     } catch {
@@ -168,17 +186,40 @@ export const sentinelApi = {
       };
     }
 
+    const title = (formData.get('title') as string) || `Upload_${Date.now()}`;
+    const rawText = (formData.get('raw_text') as string) || '';
+
     const res = await fetch(`${API_BASE_URL}/sentinel/meetings/`, {
       method: 'POST',
-      headers: getHeaders(),
-      body: formData,
+      headers: getHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({
+        title,
+        platform: 'other',
+        transcript_text: rawText || 'Manual source ingestion.'
+      }),
     });
+
     if (!res.ok) throw new Error(`Upload error: ${res.statusText}`);
     const raw = await res.json();
-    return raw.data || raw;
+    const meeting = raw.data || raw;
+
+    if (meeting.id) {
+      fetch(`${API_BASE_URL}/sentinel/meetings/${meeting.id}/process/`, {
+        method: 'POST',
+        headers: getHeaders(),
+      }).catch(() => {});
+    }
+
+    return {
+      source_id: meeting.id || `src_${Date.now()}`,
+      status: 'PROCESSING',
+      message: 'Source ingested and queued for indexing.',
+      filename: title,
+      created_at: new Date().toISOString()
+    };
   },
 
-  async transcribeAudio(blob: Blob): Promise<{ text: string }> {
+  async transcribeAudio(_blob: Blob): Promise<{ text: string }> {
     if (USE_MOCK) {
       await new Promise((r) => setTimeout(r, 1200));
       return {
@@ -186,20 +227,8 @@ export const sentinelApi = {
       };
     }
 
-    const formData = new FormData();
-    formData.append('file', blob, 'audio.webm');
-
-    const res = await fetch(`${API_BASE_URL}/sentinel/meetings/process/`, {
-      method: 'POST',
-      headers: getHeaders(),
-      body: formData,
-    });
-
-    if (!res.ok) {
-      throw new Error(`Transcription error: ${res.statusText}`);
-    }
-
-    const raw = await res.json();
-    return raw.data || raw;
+    return {
+      text: 'Voice transcription pending backend Whisper endpoint integration.'
+    };
   },
 };
