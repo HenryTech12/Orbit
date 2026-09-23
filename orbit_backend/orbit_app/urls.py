@@ -1,24 +1,24 @@
-"""
-URL configuration for orbit_app project.
-
-The `urlpatterns` list routes URLs to views. For more information please see:
-    https://docs.djangoproject.com/en/6.1/topics/http/urls/
-Examples:
-Function views
-    1. Add an import:  from my_app import views
-    2. Add a URL to urlpatterns:  path('', views.home, name='home')
-Class-based views
-    1. Add an import:  from other_app.views import Home
-    2. Add a URL to urlpatterns:  path('', Home.as_view(), name='home')
-Including another URLconf
-    1. Import the include() function: from django.urls import include, path
-    2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
-"""
+"""URL configuration for orbit_app project (unified: Sentinel proxy + Grounded Copilot)."""
 from django.contrib import admin
 from django.urls import include, path
 
+from orbit_app.core.views import ChatCopilotView, HealthCheckView
+
+views_chat_copilot = ChatCopilotView.as_view()
+views_chat_copilot_noslash = ChatCopilotView.as_view()
+
 urlpatterns = [
+    # Admin
     path('admin/', admin.site.urls),
+    # Health check (direct alias; also served via core urls as api/health/)
+    path('api/health/', HealthCheckView.as_view(), name='health-check'),
+    # Core API (health + v1/chat + copilot/ask under /api)
     path('api/', include('orbit_app.core.urls')),
+    # Core v1 API routes (same core urls mounted under api/v1/ for /api/v1/* clients)
+    path('api/v1/', include('orbit_app.core.urls')),
+    # Sentinel service proxy (Render microservice)
     path('api/sentinel/', include('orbit_app.sentinel_service.urls')),
+    # Root copilot endpoints (no /api prefix) for WhatsApp adapter
+    path('copilot/ask/', views_chat_copilot, name='copilot-ask-root'),
+    path('copilot/ask', views_chat_copilot_noslash, name='copilot-ask-root-noslash'),
 ]

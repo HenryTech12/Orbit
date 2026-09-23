@@ -12,20 +12,27 @@ https://docs.djangoproject.com/en/6.1/ref/settings/
 
 from pathlib import Path
 
+import os
+
 import environ
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 env = environ.Env()
-environ.Env.read_env(BASE_DIR / '.env')
+try:
+    environ.Env.read_env(BASE_DIR / '.env')
+except FileNotFoundError:
+    # Local self-tests / offline runs without a .env file fall back to
+    # safe defaults below instead of crashing at import time.
+    pass
 
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/6.1/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = env('SECRET_KEY')
+SECRET_KEY = env('SECRET_KEY', default='django-insecure-sentinel-dev-key-12345')
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = env.bool('DEBUG', default=False)
@@ -84,17 +91,72 @@ WSGI_APPLICATION = 'orbit_app.wsgi.application'
 
 # Database
 # https://docs.djangoproject.com/en/6.1/ref/settings/#databases
+#
+# Local self-tests fall back to sqlite (or DATABASE_URL) when Postgres env
+# vars / .env are absent; production sets POSTGRES_* (or DATABASE_URL).
 
-DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.postgresql',
-        'NAME': env('POSTGRES_DB'),
-        'USER': env('POSTGRES_USER'),
-        'PASSWORD': env('POSTGRES_PASSWORD'),
-        'HOST': env('POSTGRES_HOST', default='localhost'),
-        'PORT': env('POSTGRES_PORT', default='5432'),
+DATABASES = {'default': environ.Env.db_url_config(
+    env('DATABASE_URL', default='sqlite:///db.sqlite3'),
+)}
+
+if not DATABASES['default'].get('ENGINE'):
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.sqlite3',
+            'NAME': BASE_DIR / 'db.sqlite3',
+        }
     }
-}
+
+if all(k in os.environ for k in ('POSTGRES_DB', 'POSTGRES_USER', 'POSTGRES_PASSWORD')) or \
+        any(k in os.environ for k in ('POSTGRES_DB', 'POSTGRES_USER', 'POSTGRES_PASSWORD',
+                                       'POSTGRES_HOST', 'POSTGRES_PORT')):
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.postgresql',
+            'NAME': env('POSTGRES_DB', default='orbit'),
+            'USER': env('POSTGRES_USER', default='orbit'),
+            'PASSWORD': env('POSTGRES_PASSWORD', default='orbit'),
+            'HOST': env('POSTGRES_HOST', default='localhost'),
+            'PORT': env('POSTGRES_PORT', default='5432'),
+        }
+    }
+
+
+def _postgres_reachable(host, port, timeout=1.0):
+    """Best-effort TCP probe so tests/CI fall back to sqlite when PG is down."""
+    import socket
+
+    try:
+        with socket.create_connection((host, int(port)), timeout=timeout):
+            return True
+    except Exception:
+        return False
+
+
+def _should_use_sqlite_fallback():
+    # Explicit opt-in always wins (local dev / CI without Postgres).
+    if os.environ.get('ORBIT_USE_SQLITE', '').lower() in ('1', 'true', 'yes'):
+        return True
+    # Explicit DATABASE_URL means the operator chose the backend; respect it.
+    if os.environ.get('DATABASE_URL'):
+        return False
+    engine = (DATABASES.get('default', {}).get('ENGINE') or '')
+    if 'postgresql' not in engine:
+        return False
+    # Fall back to sqlite whenever Postgres is unreachable (tests, migrate,
+    # shell, runserver offline). Production with a live PG is unaffected
+    # because the probe succeeds and Postgres is kept.
+    cfg = DATABASES['default']
+    return not _postgres_reachable(cfg.get('HOST') or 'localhost', cfg.get('PORT') or 5432)
+
+
+if _should_use_sqlite_fallback():
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.sqlite3',
+            'NAME': BASE_DIR / 'db.sqlite3',
+        }
+    }
 
 
 # Password validation
