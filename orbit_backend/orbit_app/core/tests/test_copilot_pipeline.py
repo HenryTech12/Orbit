@@ -16,6 +16,19 @@ class CopilotPipelineTest(APITestCase):
         "Ada to draft the migration plan."
     )
 
+    @staticmethod
+    def _payload(response):
+        """Unwrap ResponseWrapper envelope: {status, message, data: {...}}.
+
+        Older copilot responses returned the copilot dict at the top level;
+        the unified view wraps it under ``data``. Accept both shapes so the
+        test pins behaviour without coupling to envelope placement.
+        """
+        data = response.data
+        if isinstance(data, dict) and isinstance(data.get("data"), dict):
+            return data["data"]
+        return data
+
     def setUp(self):
         self.message = Message.objects.create(
             source_type="pdf",
@@ -46,15 +59,16 @@ class CopilotPipelineTest(APITestCase):
             format="json",
         )
         self.assertEqual(grounded.status_code, status.HTTP_200_OK)
-        self.assertEqual(grounded.data["trust_status"], "verified")
-        self.assertIn("Postgres", grounded.data["answer"])
-        self.assertIn("Friday", grounded.data["answer"])
-        self.assertTrue(grounded.data["citations"])
-        self.assertEqual(grounded.data["citations"][0]["message_id"], self.message.pk)
-        self.assertIn("retrieval_meta", grounded.data)
-        self.assertGreaterEqual(grounded.data["retrieval_meta"]["hits"], 1)
-        self.assertIn("contradictions", grounded.data)
-        self.assertIn("action_items", grounded.data)
+        body = self._payload(grounded)
+        self.assertEqual(body["trust_status"], "verified")
+        self.assertIn("Postgres", body["answer"])
+        self.assertIn("Friday", body["answer"])
+        self.assertTrue(body["citations"])
+        self.assertEqual(body["citations"][0]["message_id"], self.message.pk)
+        self.assertIn("retrieval_meta", body)
+        self.assertGreaterEqual(body["retrieval_meta"]["hits"], 1)
+        self.assertIn("contradictions", body)
+        self.assertIn("action_items", body)
 
         # Alias route behaves identically.
         alias = self.client.post(
@@ -63,7 +77,7 @@ class CopilotPipelineTest(APITestCase):
             format="json",
         )
         self.assertEqual(alias.status_code, status.HTTP_200_OK)
-        self.assertEqual(alias.data["trust_status"], "verified")
+        self.assertEqual(self._payload(alias)["trust_status"], "verified")
 
         # Ungrounded query -> 200 + unknown (hallucination guardrail).
         ungrounded = self.client.post(
@@ -72,7 +86,7 @@ class CopilotPipelineTest(APITestCase):
             format="json",
         )
         self.assertEqual(ungrounded.status_code, status.HTTP_200_OK)
-        self.assertEqual(ungrounded.data["trust_status"], "unknown")
+        self.assertEqual(self._payload(ungrounded)["trust_status"], "unknown")
 
     def test_request_validation(self):
         empty = self.client.post(self.CHAT_URL, {}, format="json")

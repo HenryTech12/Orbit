@@ -122,6 +122,43 @@ if all(k in os.environ for k in ('POSTGRES_DB', 'POSTGRES_USER', 'POSTGRES_PASSW
     }
 
 
+def _postgres_reachable(host, port, timeout=1.0):
+    """Best-effort TCP probe so tests/CI fall back to sqlite when PG is down."""
+    import socket
+
+    try:
+        with socket.create_connection((host, int(port)), timeout=timeout):
+            return True
+    except Exception:
+        return False
+
+
+def _should_use_sqlite_fallback():
+    # Explicit opt-in always wins (local dev / CI without Postgres).
+    if os.environ.get('ORBIT_USE_SQLITE', '').lower() in ('1', 'true', 'yes'):
+        return True
+    # Explicit DATABASE_URL means the operator chose the backend; respect it.
+    if os.environ.get('DATABASE_URL'):
+        return False
+    engine = (DATABASES.get('default', {}).get('ENGINE') or '')
+    if 'postgresql' not in engine:
+        return False
+    # Fall back to sqlite whenever Postgres is unreachable (tests, migrate,
+    # shell, runserver offline). Production with a live PG is unaffected
+    # because the probe succeeds and Postgres is kept.
+    cfg = DATABASES['default']
+    return not _postgres_reachable(cfg.get('HOST') or 'localhost', cfg.get('PORT') or 5432)
+
+
+if _should_use_sqlite_fallback():
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.sqlite3',
+            'NAME': BASE_DIR / 'db.sqlite3',
+        }
+    }
+
+
 # Password validation
 # https://docs.djangoproject.com/en/6.1/ref/settings/#auth-password-validators
 
