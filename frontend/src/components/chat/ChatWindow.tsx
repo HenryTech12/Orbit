@@ -1,5 +1,5 @@
-import React, { useState } from "react";
-import { useMutation } from "@tanstack/react-query";
+import React, { useState, useEffect } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { sentinelApi } from "@/services/api";
 import type { CopilotAskResponse } from "@/types/sentinel";
 import { ChatMessage, type ChatMessageItem } from "./ChatMessage";
@@ -8,22 +8,37 @@ import { Send, Loader2, Sparkles } from "lucide-react";
 import { useVoiceInteraction } from "@/hooks/useVoiceInteraction";
 import { VoiceInputButton } from "@/components/chat/VoiceInputButton";
 
+const INITIAL_MESSAGE: ChatMessageItem = {
+  id: "initial",
+  sender: "assistant",
+  response: {
+    answer:
+      "Hello! I am Sentinel, your UniPods Knowledge Copilot. Ask me about announcements, deadlines, meetings, or decisions across our channels.",
+    status: "CONFIRMED",
+    citations: [],
+  },
+  timestamp: new Date().toISOString(),
+};
+
 export const ChatWindow: React.FC = () => {
   const [input, setInput] = useState("");
   const [selectedSourceId, setSelectedSourceId] = useState<string | null>(null);
   const [messages, setMessages] = useState<ChatMessageItem[]>([
-    {
-      id: "welcome",
-      sender: "assistant",
-      response: {
-        answer:
-          "Hello! I am Sentinel, your UniPods Knowledge Copilot. Ask me about announcements, deadlines, meetings, or decisions across our channels.",
-        status: "CONFIRMED",
-        citations: [],
-      },
-      timestamp: new Date().toISOString(),
-    },
+    INITIAL_MESSAGE,
   ]);
+  const queryClient = useQueryClient();
+
+  // Fetch persisted history from backend
+  const { data: history, isLoading: isHistoryLoading } = useQuery({
+    queryKey: ["sentinelChatHistory", "default-session"],
+    queryFn: () => sentinelApi.getHistory("default-session"),
+  });
+
+  useEffect(() => {
+    if (history && history.length > 0) {
+      setMessages(history);
+    }
+  }, [history]);
 
   const handleSendText = (textToSend: string, shouldSpeakResponse = false) => {
     const trimmed = textToSend.trim();
@@ -58,8 +73,11 @@ export const ChatWindow: React.FC = () => {
 
   const askMutation = useMutation({
     mutationFn: ({ question }: { question: string; shouldSpeak: boolean }) =>
-      sentinelApi.ask({ question }),
+      sentinelApi.ask({ question, sessionId: "default-session" }),
     onSuccess: (data: CopilotAskResponse, variables) => {
+      queryClient.invalidateQueries({
+        queryKey: ["sentinelChatHistory", "default-session"],
+      });
       const assistantMessage: ChatMessageItem = {
         id: `asst-${Date.now()}`,
         sender: "assistant",
@@ -99,13 +117,20 @@ export const ChatWindow: React.FC = () => {
     <div className="flex flex-col h-[calc(100vh-8rem)] max-w-4xl mx-auto bg-zinc-50 dark:bg-zinc-950 rounded-xl border border-zinc-200 dark:border-zinc-800 shadow-sm overflow-hidden">
       {/* Chat Messages Scroll Area */}
       <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4">
-        {messages.map((msg) => (
-          <ChatMessage
-            key={msg.id}
-            message={msg}
-            onSelectCitation={(sourceId) => setSelectedSourceId(sourceId)}
-          />
-        ))}
+        {isHistoryLoading && messages.length <= 1 ? (
+          <div className="flex items-center justify-center h-32 text-zinc-400 text-xs">
+            <Loader2 className="w-4 h-4 animate-spin mr-2" />
+            Loading conversation history...
+          </div>
+        ) : (
+          messages.map((msg) => (
+            <ChatMessage
+              key={msg.id}
+              message={msg}
+              onSelectCitation={(sourceId) => setSelectedSourceId(sourceId)}
+            />
+          ))
+        )}
 
         {askMutation.isPending && (
           <div className="flex items-center gap-2 text-zinc-500 text-xs pl-2 py-2">

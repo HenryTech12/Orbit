@@ -170,6 +170,11 @@ REST_FRAMEWORK = {
 
 CORS_ALLOWED_ORIGINS = env.list('CORS_ALLOWED_ORIGINS', default=[])
 
+from corsheaders.defaults import default_headers
+CORS_ALLOW_HEADERS = list(default_headers) + [
+    'x-api-key',
+]
+
 
 # Celery
 # https://docs.celeryq.dev/en/stable/userguide/configuration.html
@@ -191,3 +196,4 @@ SENTINEL_SERVICE_TIMEOUT = env.int('SENTINEL_SERVICE_TIMEOUT', default=90)
 
 # API keys accepted by this backend's own API (comma-separated). Empty = no key works.
 ORBIT_API_KEYS = env.list('ORBIT_API_KEYS', default=[])
+
