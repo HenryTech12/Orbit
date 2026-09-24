@@ -1,23 +1,24 @@
-import { askLocalCopilot } from "./localCopilot.js";
+import { askLocalCopilot } from './localCopilot.js';
 
 const questions = [
-  "What did we plan for September 22?"
+  'What did we plan for September 22?',
+  'When is the hackathon deadline?',
 ];
 
 for (const question of questions) {
-  console.log("\n================================");
+  console.log('\n================================');
   console.log(`QUESTION: ${question}`);
-  console.log("================================\n");
+  console.log('================================\n');
 
   const response = await askLocalCopilot(question);
 
-  console.log("ANSWER:");
+  console.log('ANSWER:');
   console.log(response.answer);
 
-  console.log("\nTRUST:");
+  console.log('\nTRUST:');
   console.log(response.status);
 
-  console.log("\nSOURCES:");
+  console.log('\nSOURCES:');
 
   for (const citation of response.citations) {
     console.log(`- ${citation.sourceName}`);

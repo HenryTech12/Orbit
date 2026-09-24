@@ -1,0 +1,25 @@
+﻿node_modules/
+dist/
+
+# Secrets
+.env
+**/.env
+
+# WhatsApp session
+auth_info/
+**/auth_info/
+
+# Private data folders (any depth)
+**/data/
+**/live/
+**/documents/
+**/meetings/
+**/official/
+
+# Embedding cache
+.cache/
+**/.cache/
+
+# OS noise
+.DS_Store
+Thumbs.db
